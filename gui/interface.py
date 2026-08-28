@@ -2,7 +2,7 @@
 =============================================================================
 File        : gui/interface.py
 Project     : PCB Inspection System
-Description : Professional Streamlit interface - Module 1 active.
+Description : Professional Streamlit interface - Modules 1 & 2 active (Tabbed Results).
 =============================================================================
 """
 
@@ -25,9 +25,12 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 from modules.preprocessing import preprocess_image, get_preprocessing_stages
+from modules.segmentation import get_segmentation_stages
 
-OUTPUT_DIR = os.path.join(PROJECT_ROOT, "outputs", "preprocessing")
-os.makedirs(OUTPUT_DIR, exist_ok=True)
+OUTPUT_DIR_PRE = os.path.join(PROJECT_ROOT, "outputs", "preprocessing")
+OUTPUT_DIR_SEG = os.path.join(PROJECT_ROOT, "outputs", "segmentation")
+os.makedirs(OUTPUT_DIR_PRE, exist_ok=True)
+os.makedirs(OUTPUT_DIR_SEG, exist_ok=True)
 
 # ============================================================
 # Page config
@@ -41,7 +44,7 @@ st.set_page_config(
 )
 
 # ============================================================
-# CSS
+# CSS  (ORIGINAL DESIGN KEPT)
 # ============================================================
 
 st.markdown("""
@@ -192,6 +195,27 @@ html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
 .sb-pipe-step { color:#4a6890; font-size:0.74rem; padding:1px 0; }
 .sb-pipe-arr { color:#1a2a40; font-size:0.7rem; padding-left:6px; }
 
+/* Tab styling - ADDED, same colour language as original design */
+.stTabs [data-baseweb="tab-list"] {
+    gap:8px;
+    background:#0d1522;
+    border:1px solid #1f2d45;
+    border-radius:12px;
+    padding:8px 10px;
+}
+.stTabs [data-baseweb="tab"] {
+    border-radius:8px;
+    color:#6b85b0;
+    font-size:0.84rem;
+    font-weight:600;
+    padding:10px 18px;
+}
+.stTabs [aria-selected="true"] {
+    background:linear-gradient(135deg,#0f2347,#112040) !important;
+    color:#7ab3ff !important;
+    border:1px solid #3a86ff !important;
+}
+
 hr { border-color:#131e30 !important; }
 </style>
 """, unsafe_allow_html=True)
@@ -201,48 +225,80 @@ hr { border-color:#131e30 !important; }
 # ============================================================
 
 with st.sidebar:
-    st.markdown("<div class='sb-title'>🔬 PCB Inspection</div>", unsafe_allow_html=True)
-    st.markdown("<div class='sb-tag'>Automated Quality Control System</div>", unsafe_allow_html=True)
+    st.markdown(
+        "<div class='sb-title'>🔬 PCB Inspection</div>",
+        unsafe_allow_html=True
+    )
+    st.markdown(
+        "<div class='sb-tag'>Automated Quality Control System</div>",
+        unsafe_allow_html=True
+    )
+
     st.markdown("---")
-    st.markdown("<div class='sb-section'>📋 Inspection Workflow</div>", unsafe_allow_html=True)
+
+    # ========================================================
+    # Inspection Workflow
+    # ========================================================
+
+    st.markdown(
+        "<div class='sb-section'>📋 Inspection Workflow</div>",
+        unsafe_allow_html=True
+    )
+
     st.markdown("""
         <div class='sb-step-on'>
             <div class='sn'>✦ Image Pre-processing</div>
             <div class='sd'>Contrast enhancement &amp; noise reduction</div>
         </div>
-        <div class='sb-step-off'>
-            <div class='sn'>○ Defect Segmentation</div>
-            <div class='sd'>PCB defect region extraction</div>
+
+        <div class='sb-step-on'>
+            <div class='sn'>✦ Defect Segmentation</div>
+            <div class='sd'>Difference + Otsu + Morphology + Contours</div>
         </div>
+
         <div class='sb-step-off'>
             <div class='sn'>○ Feature Analysis</div>
             <div class='sd'>Defect characteristic analysis</div>
         </div>
+
         <div class='sb-step-off'>
             <div class='sn'>○ Inspection Report</div>
             <div class='sd'>Result visualisation &amp; summary</div>
         </div>
     """, unsafe_allow_html=True)
+
     st.markdown("---")
-    st.markdown("<div class='sb-section'>⚙️ System Information</div>", unsafe_allow_html=True)
+
+    # ========================================================
+    # System Information
+    # ========================================================
+
+    st.markdown(
+        "<div class='sb-section'>⚙️ System Information</div>",
+        unsafe_allow_html=True
+    )
+
     st.markdown("""
-        <div class='sb-info'>
-            <div class='sb-info-label'>Dataset</div>
-            <div class='sb-info-val'>DeepPCB</div>
-            <div class='sb-info-label'>Current Pipeline</div>
-            <div class='sb-pipe-step'>📥 Input Image</div>
-            <div class='sb-pipe-arr'>↓</div>
-            <div class='sb-pipe-step'>🔲 Grayscale Conversion</div>
-            <div class='sb-pipe-arr'>↓</div>
-            <div class='sb-pipe-step'>🔉 Median Filtering</div>
-            <div class='sb-pipe-arr'>↓</div>
-            <div class='sb-pipe-step'>🔆 CLAHE Enhancement</div>
-            <div class='sb-info-label'>Architecture</div>
-            <div class='sb-info-val'>Modular Image Processing</div>
-            <div class='sb-info-label'>Parameters</div>
-            <div class='sb-info-val'>Median kernel: 5×5<br>CLAHE clip: 2.0<br>Tile grid: 8×8</div>
-        </div>
-    """, unsafe_allow_html=True)
+<div class='sb-info'>
+<div class='sb-info-label'>Dataset</div>
+<div class='sb-info-val'>DeepPCB</div>
+
+<div class='sb-info-label'>Current Pipeline</div>
+<div class='sb-pipe-step'>📥 Input Image</div>
+<div class='sb-pipe-arr'>↓</div>
+<div class='sb-pipe-step'>🔲 Grayscale Conversion</div>
+<div class='sb-pipe-arr'>↓</div>
+<div class='sb-pipe-step'>🔉 Median Filtering</div>
+<div class='sb-pipe-arr'>↓</div>
+<div class='sb-pipe-step'>🔆 CLAHE Enhancement</div>
+
+<div class='sb-info-label'>Architecture</div>
+<div class='sb-info-val'>Modular Image Processing</div>
+
+<div class='sb-info-label'>Parameters</div>
+<div class='sb-info-val'>Median kernel: 5×5<br>CLAHE clip: 2.0<br>Tile grid: 8×8</div>
+</div>
+""", unsafe_allow_html=True)
 
 # ============================================================
 # Hero
@@ -250,11 +306,11 @@ with st.sidebar:
 
 st.markdown("""
 <div class='hero'>
-    <div class='hero-badge'>Module 1 — Image Pre-processing &amp; Calibration</div>
+    <div class='hero-badge'>Modules 1 &amp; 2 — Integrated Inspection Pipeline</div>
     <div class='hero-title'>🔬 PCB Defect Inspection System</div>
     <div class='hero-subtitle'>
-        Upload a PCB board image to run the complete pre-processing pipeline.
-        Each stage is visualised with quality metrics to demonstrate the enhancement applied.
+        Upload a defective PCB image and its matching template.
+        Run the integrated pipeline, then use the tabs to inspect each module result.
     </div>
 </div>
 """, unsafe_allow_html=True)
@@ -270,7 +326,7 @@ st.markdown("""
         <div class='plabel'>Pre-processing</div>
     </div>
     <div class='pipe-arrow'>→</div>
-    <div class='pipe-step'>
+    <div class='pipe-step active'>
         <div class='icon'>🔍</div>
         <div class='plabel'>Segmentation</div>
     </div>
@@ -291,20 +347,31 @@ st.markdown("""
 # Upload
 # ============================================================
 
-st.markdown("<div class='section-label'>📂 Step 1 — Upload PCB Image</div>", unsafe_allow_html=True)
+st.markdown("<div class='section-label'>📂 Step 1 — Upload PCB Image Pair</div>", unsafe_allow_html=True)
 
-uploaded_file = st.file_uploader(
-    "Choose a PCB image",
-    type=["jpg", "jpeg", "png"],
-    help="Supported: JPG, JPEG, PNG",
-    label_visibility="collapsed",
-)
+up1, up2 = st.columns(2, gap="medium")
 
-if uploaded_file is None:
+with up1:
+    defective_file = st.file_uploader(
+        "Choose defective / test PCB image",
+        type=["jpg", "jpeg", "png"],
+        help="Upload the defective/test PCB image",
+        key="defective_upload",
+    )
+
+with up2:
+    template_file = st.file_uploader(
+        "Choose matching defect-free template image",
+        type=["jpg", "jpeg", "png"],
+        help="Upload the matching PCB type and orientation template",
+        key="template_upload",
+    )
+
+if defective_file is None or template_file is None:
     st.markdown("""
         <div class='upload-hint'>
-            ⬆️ &nbsp; Drag and drop or browse to upload a PCB image<br>
-            <span style='font-size:0.78rem;'>Supported formats: JPG · JPEG · PNG</span>
+            ⬆️ &nbsp; Upload both the defective/test image and its matching template image.<br>
+            <span style='font-size:0.78rem;'>Use the same PCB type and orientation for both images.</span>
         </div>
     """, unsafe_allow_html=True)
 
@@ -312,44 +379,67 @@ if uploaded_file is None:
 # Main flow
 # ============================================================
 
-if uploaded_file is not None:
+if defective_file is not None and template_file is not None:
 
-    # Decode
-    file_bytes   = np.frombuffer(uploaded_file.read(), np.uint8)
-    original_bgr = cv2.imdecode(file_bytes, cv2.IMREAD_COLOR)
-    original_rgb = cv2.cvtColor(original_bgr, cv2.COLOR_BGR2RGB)
-    file_kb      = uploaded_file.size / 1024
+    # Decode both images
+    test_bytes = np.frombuffer(defective_file.getvalue(), np.uint8)
+    tmpl_bytes = np.frombuffer(template_file.getvalue(), np.uint8)
+
+    test_bgr = cv2.imdecode(test_bytes, cv2.IMREAD_COLOR)
+    template_bgr = cv2.imdecode(tmpl_bytes, cv2.IMREAD_COLOR)
+
+    if test_bgr is None or template_bgr is None:
+        st.error("❌ Unable to decode one of the uploaded images.")
+        st.stop()
+
+    test_rgb = cv2.cvtColor(test_bgr, cv2.COLOR_BGR2RGB)
+    template_rgb = cv2.cvtColor(template_bgr, cv2.COLOR_BGR2RGB)
 
     st.markdown("---")
+    st.markdown("<div class='section-label'>📷 Step 2 — Review Uploaded Image Pair</div>", unsafe_allow_html=True)
 
-    # --- Original image ---
-    st.markdown("<div class='section-label'>📷 Step 2 — Review Uploaded Image</div>", unsafe_allow_html=True)
+    rv1, rv2 = st.columns(2, gap="medium")
 
-    col_img, col_info = st.columns([3, 1], gap="medium")
-
-    with col_img:
-        st.image(original_rgb, caption=f"📄 {uploaded_file.name}", use_container_width=True)
-
-    with col_info:
+    with rv1:
+        st.image(test_rgb, caption=f"Defective/Test — {defective_file.name}", use_container_width=True)
         st.markdown(f"""
         <div class='img-info-card'>
             <div class='ril'>Filename</div>
-            <div class='riv'>{uploaded_file.name}</div>
+            <div class='riv'>{defective_file.name}</div>
+            <div class='ril'>Image Type</div>
+            <div class='riv'>Defective / Test PCB</div>
             <div class='ril'>Resolution</div>
-            <div class='riv'>{original_bgr.shape[1]} × {original_bgr.shape[0]} px</div>
+            <div class='riv'>{test_bgr.shape[1]} × {test_bgr.shape[0]} px</div>
             <div class='ril'>Colour Space</div>
             <div class='riv'>BGR (3 channels)</div>
             <div class='ril'>File Size</div>
-            <div class='riv'>{file_kb:.1f} KB</div>
+            <div class='riv'>{defective_file.size / 1024:.1f} KB</div>
+            <div class='ril'>Bit Depth</div>
+            <div class='riv'>8-bit per channel</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with rv2:
+        st.image(template_rgb, caption=f"Template — {template_file.name}", use_container_width=True)
+        st.markdown(f"""
+        <div class='img-info-card'>
+            <div class='ril'>Filename</div>
+            <div class='riv'>{template_file.name}</div>
+            <div class='ril'>Image Type</div>
+            <div class='riv'>Defect-Free Template</div>
+            <div class='ril'>Resolution</div>
+            <div class='riv'>{template_bgr.shape[1]} × {template_bgr.shape[0]} px</div>
+            <div class='ril'>Colour Space</div>
+            <div class='riv'>BGR (3 channels)</div>
+            <div class='ril'>File Size</div>
+            <div class='riv'>{template_file.size / 1024:.1f} KB</div>
             <div class='ril'>Bit Depth</div>
             <div class='riv'>8-bit per channel</div>
         </div>
         """, unsafe_allow_html=True)
 
     st.markdown("---")
-
-    # --- Run button ---
-    st.markdown("<div class='section-label'>⚡ Step 3 — Run Pre-processing</div>", unsafe_allow_html=True)
+    st.markdown("<div class='section-label'>⚡ Step 3 — Run Inspection Pipeline</div>", unsafe_allow_html=True)
 
     col_btn, col_hint = st.columns([1, 4], gap="small")
     with col_btn:
@@ -357,52 +447,131 @@ if uploaded_file is not None:
     with col_hint:
         st.markdown(
             "<p style='color:#2a4060;font-size:0.84rem;margin-top:8px;'>"
-            "Pipeline: Grayscale Conversion → Median Filter (5×5) → CLAHE (clip=2.0, tile=8×8)</p>",
+            "Pipeline: Pre-processing → Template Difference → Otsu → Opening → Closing → Contour Detection</p>",
             unsafe_allow_html=True,
         )
 
-    # --- Processing ---
     if run_btn:
 
         t_start = time.time()
 
-        with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
-            tmp.write(uploaded_file.getvalue())
-            tmp_path = tmp.name
+        test_tmp_path = None
+        tmpl_tmp_path = None
 
         try:
-            with st.spinner("🔧 Running Image Pre-processing Pipeline..."):
-                stages, metrics = get_preprocessing_stages(tmp_path)
-                processed = stages["enhanced"]
-                time.sleep(0.2)
+            with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp_test:
+                tmp_test.write(defective_file.getvalue())
+                test_tmp_path = tmp_test.name
+
+            with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp_tmpl:
+                tmp_tmpl.write(template_file.getvalue())
+                tmpl_tmp_path = tmp_tmpl.name
+
+            with st.spinner("🔧 Running PCB Inspection Pipeline..."):
+
+                # ------------------------------
+                # Module 1: preprocess TEST
+                # ------------------------------
+                test_stages, test_metrics = get_preprocessing_stages(test_tmp_path)
+                processed_test = test_stages["enhanced"]
+
+                # ------------------------------
+                # Module 1: preprocess TEMPLATE
+                # ------------------------------
+                template_stages, template_metrics = get_preprocessing_stages(tmpl_tmp_path)
+                processed_template = template_stages["enhanced"]
+
+                # ------------------------------
+                # Module 2: template-based segmentation
+                # ------------------------------
+                seg_stages, seg_metrics = get_segmentation_stages(
+                    processed_test,
+                    processed_template
+                )
 
             proc_time = time.time() - t_start
 
-            # Save output
-            out_name = f"preprocessed_{uploaded_file.name}"
-            out_path = os.path.join(OUTPUT_DIR, out_name)
-            cv2.imwrite(out_path, processed)
+            # Store in session state so tabs remain stable
+            st.session_state["pcb_result"] = {
+                "test_stages": test_stages,
+                "test_metrics": test_metrics,
+                "template_stages": template_stages,
+                "template_metrics": template_metrics,
+                "processed_test": processed_test,
+                "processed_template": processed_template,
+                "seg_stages": seg_stages,
+                "seg_metrics": seg_metrics,
+                "proc_time": proc_time,
+                "test_name": defective_file.name,
+                "template_name": template_file.name,
+            }
 
-            # ── Success banner ──────────────────────────────────────
-            st.markdown(
-                f"<div class='success-banner'>"
-                f"✅ &nbsp; Pre-processing completed in <strong>{proc_time:.2f}s</strong> &nbsp;|&nbsp; "
-                f"Contrast improved by <strong>{metrics['contrast_gain']:+.1f}%</strong> &nbsp;|&nbsp; "
-                f"Saved → <code>outputs/preprocessing/{out_name}</code>"
-                f"</div>",
-                unsafe_allow_html=True,
-            )
+        except Exception as err:
+            st.error(f"❌ Inspection failed: {err}")
 
-            # ── Section: Pipeline Stage Visualisation ───────────────
-            st.markdown("<div class='section-label'>🔬 Step 4 — Pipeline Stage Visualisation</div>",
+        finally:
+            if test_tmp_path and os.path.exists(test_tmp_path):
+                os.remove(test_tmp_path)
+            if tmpl_tmp_path and os.path.exists(tmpl_tmp_path):
+                os.remove(tmpl_tmp_path)
+
+    # ============================================================
+    # Result tabs
+    # ============================================================
+
+    if "pcb_result" in st.session_state:
+
+        result = st.session_state["pcb_result"]
+
+        test_stages = result["test_stages"]
+        test_metrics = result["test_metrics"]
+        template_stages = result["template_stages"]
+        template_metrics = result["template_metrics"]
+        processed_test = result["processed_test"]
+        processed_template = result["processed_template"]
+        seg_stages = result["seg_stages"]
+        seg_metrics = result["seg_metrics"]
+        proc_time = result["proc_time"]
+
+        out_name_pre = f"preprocessed_{result['test_name']}"
+        out_path_pre = os.path.join(OUTPUT_DIR_PRE, out_name_pre)
+        cv2.imwrite(out_path_pre, processed_test)
+
+        out_name_seg = f"segmented_{os.path.splitext(result['test_name'])[0]}.png"
+        out_path_seg = os.path.join(OUTPUT_DIR_SEG, out_name_seg)
+        if "overlay" in seg_stages:
+            cv2.imwrite(out_path_seg, seg_stages["overlay"])
+
+        st.markdown(
+            f"<div class='success-banner'>"
+            f"✅ &nbsp; Inspection completed in <strong>{proc_time:.2f}s</strong> &nbsp;|&nbsp; "
+            f"Detected <strong>{seg_metrics.get('defect_count', 0)}</strong> potential defect region(s)"
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+
+        # ------------------------------------------------------------
+        # TOP TABS - user can click each module result
+        # ------------------------------------------------------------
+        tab1, tab2 = st.tabs([
+            "🖼️ Module 1 — Pre-processing",
+            "🔍 Module 2 — Defect Segmentation",
+        ])
+
+        # ============================================================
+        # TAB 1 — MODULE 1
+        # ============================================================
+        with tab1:
+
+            st.markdown("<div class='section-label'>🔬 Module 1 — Test Image Pre-processing Stages</div>",
                         unsafe_allow_html=True)
 
             sc1, sc2, sc3, sc4 = st.columns(4, gap="small")
             stage_defs = [
-                (sc1, "original",  "Stage 1",  "Original",         "Raw BGR → Grayscale",   False),
-                (sc2, "grayscale", "Stage 2",  "Grayscale",        "Luminance only",         False),
-                (sc3, "filtered",  "Stage 3",  "Median Filtered",  "Salt-and-pepper removed",False),
-                (sc4, "enhanced",  "Stage 4",  "CLAHE Enhanced",   "Local contrast boosted", True),
+                (sc1, "original",  "Stage 1", "Original",        "Raw BGR → Grayscale", False),
+                (sc2, "grayscale", "Stage 2", "Grayscale",       "Luminance only", False),
+                (sc3, "filtered",  "Stage 3", "Median Filtered", "Noise suppressed", False),
+                (sc4, "enhanced",  "Stage 4", "CLAHE Enhanced",  "Local contrast boosted", True),
             ]
 
             for col, key, num, name, desc, is_final in stage_defs:
@@ -415,31 +584,31 @@ if uploaded_file is not None:
                             <div class='stage-desc'>{desc}</div>
                         </div>
                     """, unsafe_allow_html=True)
-                    st.image(stages[key], clamp=True, channels="GRAY",
+                    st.image(test_stages[key], clamp=True, channels="GRAY",
                              use_container_width=True)
 
-            # ── Section: Quality Metrics ────────────────────────────
             st.markdown("---")
-            st.markdown("<div class='section-label'>📊 Image Quality Metrics</div>", unsafe_allow_html=True)
+            st.markdown("<div class='section-label'>📊 Image Quality Metrics</div>",
+                        unsafe_allow_html=True)
 
-            m_orig = metrics["original"]
-            m_enh  = metrics["enhanced"]
-            m_filt = metrics["filtered"]
+            m_orig = test_metrics["original"]
+            m_enh = test_metrics["enhanced"]
+            m_filt = test_metrics["filtered"]
 
             contrast_gain_str = (
-                f"<span class='qm-delta pos'>▲ +{metrics['contrast_gain']}%</span>"
-                if metrics["contrast_gain"] >= 0
-                else f"<span class='qm-delta neg'>▼ {metrics['contrast_gain']}%</span>"
+                f"<span class='qm-delta pos'>▲ +{test_metrics['contrast_gain']}%</span>"
+                if test_metrics["contrast_gain"] >= 0
+                else f"<span class='qm-delta neg'>▼ {test_metrics['contrast_gain']}%</span>"
             )
 
             noise_str = (
-                f"<span class='qm-delta pos'>▼ {metrics['noise_reduction']:.1f}% reduced</span>"
-                if metrics["noise_reduction"] > 0
+                f"<span class='qm-delta pos'>▼ {test_metrics['noise_reduction']:.1f}% reduced</span>"
+                if test_metrics["noise_reduction"] > 0
                 else f"<span class='qm-delta neu'>— No change</span>"
             )
 
-            dr_gain = metrics["dynamic_range_gain"]
-            dr_str  = (
+            dr_gain = test_metrics["dynamic_range_gain"]
+            dr_str = (
                 f"<span class='qm-delta pos'>▲ +{dr_gain} levels</span>"
                 if dr_gain > 0
                 else f"<span class='qm-delta neu'>— {dr_gain} levels</span>"
@@ -470,12 +639,11 @@ if uploaded_file is not None:
                 <div class='qm-card'>
                     <div class='qm-label'>Processing Time</div>
                     <div class='qm-value'>{proc_time:.2f}s</div>
-                    <div class='qm-delta neu'>End-to-end</div>
+                    <div class='qm-delta neu'>Modules 1 + 2 total</div>
                 </div>
             </div>
             """, unsafe_allow_html=True)
 
-            # ── Section: Histogram Comparison ──────────────────────
             st.markdown("---")
             st.markdown("<div class='section-label'>📈 Pixel Intensity Histogram — Before vs After</div>",
                         unsafe_allow_html=True)
@@ -484,21 +652,21 @@ if uploaded_file is not None:
             fig.patch.set_facecolor("#0b0f19")
             ax.set_facecolor("#0e1520")
 
-            ax.hist(stages["original"].ravel(), bins=256, range=(0,255),
+            ax.hist(test_stages["original"].ravel(), bins=256, range=(0,255),
                     color="#5fa8ff", alpha=0.55, label="Original (Grayscale)", density=True)
-            ax.hist(stages["enhanced"].ravel(), bins=256, range=(0,255),
+            ax.hist(test_stages["enhanced"].ravel(), bins=256, range=(0,255),
                     color="#22c55e", alpha=0.65, label="After CLAHE (Final)", density=True)
 
-            ax.set_xlabel("Pixel Intensity (0 = black  ·  255 = white)",
-                          color="#4a6890", fontsize=9)
+            ax.set_xlabel("Pixel Intensity (0 = black · 255 = white)", color="#4a6890", fontsize=9)
             ax.set_ylabel("Normalised Frequency", color="#4a6890", fontsize=9)
             ax.tick_params(colors="#2a4060", labelsize=8)
             ax.spines[["top","right","left","bottom"]].set_color("#1a2840")
             ax.set_xlim(0, 255)
-            ax.set_title("Histogram comparison shows CLAHE redistributes pixel intensities "
-                         "for improved local contrast",
-                         color="#3a5070", fontsize=8.5, pad=8)
-
+            ax.set_title(
+                "Histogram comparison shows CLAHE redistributes pixel intensities "
+                "for improved local contrast",
+                color="#3a5070", fontsize=8.5, pad=8
+            )
             legend = ax.legend(fontsize=8.5, framealpha=0.15,
                                labelcolor="white", facecolor="#0e1520")
             for line in legend.get_lines():
@@ -512,7 +680,6 @@ if uploaded_file is not None:
             st.image(buf, use_container_width=True)
             plt.close(fig)
 
-            # ── Section: Step-by-Step Explanation ──────────────────
             st.markdown("---")
             st.markdown("<div class='section-label'>📖 What Each Pipeline Step Does</div>",
                         unsafe_allow_html=True)
@@ -530,7 +697,7 @@ if uploaded_file is not None:
                         <code>Y = 0.299R + 0.587G + 0.114B</code><br>
                         This reduces data dimensionality from 3 channels to 1,
                         focusing subsequent processing on brightness information
-                        relevant to surface defect detection.
+                        relevant to PCB structural analysis.
                     </div>
                     <div class='ec-result'>
                         ✓ Mean brightness: {m_orig['mean_brightness']:.1f} &nbsp;|&nbsp;
@@ -543,14 +710,12 @@ if uploaded_file is not None:
                     <div class='ec-title'>🔉 Median Filtering (5×5 kernel)</div>
                     <div class='ec-desc'>
                         Applies a 5×5 median filter to suppress salt-and-pepper noise
-                        and sensor artefacts. Unlike Gaussian blur, median filtering
-                        is a non-linear operation that preserves sharp PCB trace edges
-                        while eliminating isolated bright/dark pixels caused by
-                        imaging noise or dust particles.
+                        and sensor artefacts. Median filtering preserves PCB trace edges
+                        while removing isolated bright or dark noise pixels.
                     </div>
                     <div class='ec-result'>
                         ✓ Noise estimate: {m_orig['noise_estimate']:.0f} → {m_filt['noise_estimate']:.0f}
-                        ({metrics['noise_reduction']:.1f}% reduction)
+                        ({test_metrics['noise_reduction']:.1f}% reduction)
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
@@ -562,15 +727,13 @@ if uploaded_file is not None:
                     <div class='ec-title'>🔆 CLAHE Enhancement</div>
                     <div class='ec-desc'>
                         Contrast Limited Adaptive Histogram Equalization (CLAHE)
-                        enhances local contrast by equalising histograms within
-                        small tile regions (8×8 grid) rather than globally.
-                        The clip limit (2.0) prevents over-amplification of noise.
-                        This is critical for PCB inspection where defects appear
-                        under uneven illumination conditions.
+                        enhances local contrast within small image regions.
+                        The clip limit prevents excessive noise amplification and
+                        improves the visibility of PCB traces and defect-sensitive areas.
                     </div>
                     <div class='ec-result'>
                         ✓ Contrast: {m_orig['contrast']:.1f} → {m_enh['contrast']:.1f}
-                        ({metrics['contrast_gain']:+.1f}%) &nbsp;|&nbsp;
+                        ({test_metrics['contrast_gain']:+.1f}%) &nbsp;|&nbsp;
                         Dynamic range: {m_enh['dynamic_range']} levels
                     </div>
                 </div>
@@ -579,55 +742,205 @@ if uploaded_file is not None:
                     <div class='ec-step'>Pipeline Summary</div>
                     <div class='ec-title'>✅ Pre-processing Calibration Result</div>
                     <div class='ec-desc'>
-                        The pre-processed image is now ready for downstream modules.
+                        The preprocessed image is ready for Module 2.
                         Colour information has been removed, noise has been suppressed,
-                        and local contrast has been enhanced — producing a calibrated
-                        grayscale image where PCB traces and potential defect regions
-                        are clearly distinguishable.
+                        and local contrast has been enhanced before template comparison
+                        and defect segmentation.
                     </div>
                     <div class='ec-result'>
-                        ✓ Output: {processed.shape[1]}×{processed.shape[0]} px
+                        ✓ Output: {processed_test.shape[1]}×{processed_test.shape[0]} px
                         &nbsp;|&nbsp; 1-channel grayscale
-                        &nbsp;|&nbsp; Range: {int(processed.min())}–{int(processed.max())}
+                        &nbsp;|&nbsp; Range: {int(processed_test.min())}–{int(processed_test.max())}
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
 
-            # ── Final comparison ────────────────────────────────────
             st.markdown("---")
             st.markdown("<div class='section-label'>🖼️ Final Comparison — Original vs Preprocessed</div>",
                         unsafe_allow_html=True)
 
             fc1, fc2 = st.columns(2, gap="medium")
             with fc1:
-                st.markdown("<p style='color:#3a5070;font-size:0.75rem;margin-bottom:5px;'>INPUT — ORIGINAL BGR</p>",
-                            unsafe_allow_html=True)
-                st.image(original_rgb, use_container_width=True)
-            with fc2:
-                st.markdown("<p style='color:#3a86ff;font-size:0.75rem;margin-bottom:5px;'>OUTPUT — PREPROCESSED GRAYSCALE</p>",
-                            unsafe_allow_html=True)
-                st.image(processed, clamp=True, channels="GRAY", use_container_width=True)
+                st.markdown(
+                    "<p style='color:#3a5070;font-size:0.75rem;margin-bottom:5px;'>INPUT — ORIGINAL PCB</p>",
+                    unsafe_allow_html=True)
+                st.image(test_rgb, use_container_width=True)
 
-            # ── Download ────────────────────────────────────────────
+            with fc2:
+                st.markdown(
+                    "<p style='color:#3a86ff;font-size:0.75rem;margin-bottom:5px;'>OUTPUT — PREPROCESSED GRAYSCALE</p>",
+                    unsafe_allow_html=True)
+                st.image(processed_test, clamp=True, channels="GRAY", use_container_width=True)
+
             st.markdown("---")
             _, dl_col, _ = st.columns([2, 1, 2])
             with dl_col:
-                ok, buf = cv2.imencode(".png", processed)
+                ok, enc = cv2.imencode(".png", processed_test)
                 if ok:
                     st.download_button(
                         label="⬇ Download Preprocessed Image",
-                        data=buf.tobytes(),
-                        file_name=f"preprocessed_{os.path.splitext(uploaded_file.name)[0]}.png",
+                        data=enc.tobytes(),
+                        file_name=f"preprocessed_{os.path.splitext(result['test_name'])[0]}.png",
                         mime="image/png",
                         use_container_width=True,
                     )
 
-        except Exception as err:
-            st.error(f"❌ Pre-processing failed: {err}")
+        # ============================================================
+        # TAB 2 — MODULE 2
+        # ============================================================
+        with tab2:
 
-        finally:
-            if os.path.exists(tmp_path):
-                os.remove(tmp_path)
+            st.markdown("<div class='section-label'>🔬 Module 2 — Defect Segmentation Stages</div>",
+                        unsafe_allow_html=True)
+
+            # 7 stages, shown in 4 + 3 layout
+            stage_order = [
+                ("test_image", "Stage 1", "Preprocessed Test", "Module 1 output"),
+                ("template_image", "Stage 2", "Preprocessed Template", "Reference input"),
+                ("difference", "Stage 3", "Absolute Difference", "Test vs template"),
+                ("otsu_binary", "Stage 4", "Otsu Binary", "Automatic thresholding"),
+                ("opening", "Stage 5", "Opening", "Small-noise removal"),
+                ("morphology", "Stage 6", "Closing", "Structural refinement"),
+                ("overlay", "Stage 7", "Defect Overlay", "Final bounding boxes"),
+            ]
+
+            row1 = st.columns(4, gap="small")
+            for col, item in zip(row1, stage_order[:4]):
+                key, num, name, desc = item
+                with col:
+                    st.markdown(f"""
+                        <div class='stage-card'>
+                            <div class='stage-num'>{num}</div>
+                            <div class='stage-name'>{name}</div>
+                            <div class='stage-desc'>{desc}</div>
+                        </div>
+                    """, unsafe_allow_html=True)
+                    img = seg_stages.get(key)
+                    if img is None:
+                        st.info("Stage output is not available from segmentation.py.")
+                    elif len(img.shape) == 3:
+                        st.image(cv2.cvtColor(img, cv2.COLOR_BGR2RGB), use_container_width=True)
+                    else:
+                        st.image(img, clamp=True, channels="GRAY", use_container_width=True)
+
+            row2 = st.columns(3, gap="small")
+            for idx, (col, item) in enumerate(zip(row2, stage_order[4:])):
+                key, num, name, desc = item
+                with col:
+                    cls = "stage-card final" if idx == 2 else "stage-card"
+                    st.markdown(f"""
+                        <div class='{cls}'>
+                            <div class='stage-num'>{num}</div>
+                            <div class='stage-name'>{name}</div>
+                            <div class='stage-desc'>{desc}</div>
+                        </div>
+                    """, unsafe_allow_html=True)
+                    img = seg_stages.get(key)
+                    if img is None:
+                        st.info("Stage output is not available from segmentation.py.")
+                    elif len(img.shape) == 3:
+                        st.image(cv2.cvtColor(img, cv2.COLOR_BGR2RGB), use_container_width=True)
+                    else:
+                        st.image(img, clamp=True, channels="GRAY", use_container_width=True)
+
+            st.markdown("---")
+            st.markdown("<div class='section-label'>📊 Segmentation Metrics</div>",
+                        unsafe_allow_html=True)
+
+            thresh = seg_metrics.get("threshold", "Auto")
+            count = seg_metrics.get("defect_count", seg_metrics.get("detected_regions", 0))
+            area_px = seg_metrics.get("defect_area_px", 0)
+            area_pct = seg_metrics.get("defect_area_pct", 0.0)
+
+            st.markdown(f"""
+            <div class='qm-row'>
+                <div class='qm-card'>
+                    <div class='qm-label'>Otsu Threshold</div>
+                    <div class='qm-value'>{thresh}</div>
+                    <div class='qm-delta neu'>Automatically selected</div>
+                </div>
+                <div class='qm-card'>
+                    <div class='qm-label'>Defect Regions</div>
+                    <div class='qm-value'>{count}</div>
+                    <div class='qm-delta pos'>Valid contours detected</div>
+                </div>
+                <div class='qm-card'>
+                    <div class='qm-label'>Defect Area</div>
+                    <div class='qm-value'>{area_px} px</div>
+                    <div class='qm-delta neu'>Total contour area</div>
+                </div>
+                <div class='qm-card'>
+                    <div class='qm-label'>Surface Coverage</div>
+                    <div class='qm-value'>{area_pct:.4f}%</div>
+                    <div class='qm-delta neg'>Defect ratio</div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            st.markdown("---")
+            st.markdown("<div class='section-label'>📖 Segmentation Pipeline Breakdown</div>",
+                        unsafe_allow_html=True)
+
+            exp1, exp2 = st.columns(2, gap="medium")
+
+            with exp1:
+                st.markdown(f"""
+                <div class='explain-card'>
+                    <div class='ec-step'>Step 1</div>
+                    <div class='ec-title'>↔ Absolute Difference</div>
+                    <div class='ec-desc'>
+                        Compares the preprocessed test PCB with its matching defect-free template.
+                        Unchanged PCB structures are suppressed while abnormal regions remain visible.
+                    </div>
+                </div>
+
+                <div class='explain-card'>
+                    <div class='ec-step'>Step 2</div>
+                    <div class='ec-title'>◐ Otsu Thresholding</div>
+                    <div class='ec-desc'>
+                        Automatically selects a global threshold from the difference image and converts
+                        candidate defect pixels into a binary mask.
+                    </div>
+                    <div class='ec-result'>✓ Threshold: {thresh}</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+            with exp2:
+                st.markdown(f"""
+                <div class='explain-card'>
+                    <div class='ec-step'>Step 3</div>
+                    <div class='ec-title'>◼ Morphological Opening &amp; Closing</div>
+                    <div class='ec-desc'>
+                        Opening removes small isolated noise. Closing reconnects small discontinuities
+                        and improves the continuity of candidate defect regions.
+                    </div>
+                </div>
+
+                <div class='explain-card'>
+                    <div class='ec-step'>Step 4</div>
+                    <div class='ec-title'>▣ Contour Detection</div>
+                    <div class='ec-desc'>
+                        Extracts independent defect candidates from the refined mask and draws
+                        bounding boxes for visual localisation.
+                    </div>
+                    <div class='ec-result'>✓ Detected regions: {count}</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+
+            st.markdown("---")
+            _, dl_col2, _ = st.columns([2, 1, 2])
+            with dl_col2:
+                overlay = seg_stages.get("overlay")
+                ok, enc2 = (False, None) if overlay is None else cv2.imencode(".png", overlay)
+                if ok:
+                    st.download_button(
+                        label="⬇ Download Defect Detection Result",
+                        data=enc2.tobytes(),
+                        file_name=out_name_seg,
+                        mime="image/png",
+                        use_container_width=True,
+                    )
 
 else:
-    st.info("👆 Upload a PCB image above to get started.")
+    st.info("👆 Upload both a defective/test PCB image and its matching template image to get started.")

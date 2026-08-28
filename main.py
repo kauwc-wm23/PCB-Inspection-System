@@ -69,7 +69,7 @@ if PROJECT_ROOT not in sys.path:
 from modules.preprocessing import preprocess_image
 
 # --- Module 2: Segmentation (PENDING - uncomment when implemented) ---
-# from modules.segmentation import segment_image
+from modules.segmentation import segment_image
 
 # --- Module 3: Feature Analysis (PENDING - uncomment when implemented) ---
 # from modules.feature_analysis import analyse_features
@@ -242,14 +242,29 @@ def main():
 
     print("\nPreprocessing completed.")
 
+# ------------------------------------------------------------------
+    # Module 2: Segmentation [ACTIVE]
     # ------------------------------------------------------------------
-    # Module 2: Segmentation  [PENDING]
-    # ------------------------------------------------------------------
-    # TODO: Integrate when modules/segmentation.py is implemented.
-    #
-    # print("\nRunning Module 2 - Segmentation...")
-    # segmented = segment_image(processed)
-    # print("Segmentation completed.")
+    print("\nRunning Module 2 - Segmentation...")
+    try:
+        binary_mask, contours = segment_image(processed)
+        print(f"  -> Output Mask Shape : {binary_mask.shape}")
+        print(f"  -> Defect Contours   : {len(contours)} candidate regions detected")
+        
+        # 保存 Module 2 的输出掩膜图片
+        seg_output_dir = os.path.join(PROJECT_ROOT, "outputs", "segmentation")
+        seg_output_path = save_result(
+            binary_mask,
+            filename="segmented_mask.png",
+            output_dir=seg_output_dir,
+        )
+        print(f"  -> Saved Segmented Mask : {seg_output_path}")
+        print("Segmentation completed.")
+
+    except Exception as error:
+        print("\n[ERROR] Module 2 failed.")
+        print(error)
+        sys.exit(1)
 
     # ------------------------------------------------------------------
     # Module 3: Feature Analysis  [PENDING]
