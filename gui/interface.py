@@ -26,6 +26,8 @@ if PROJECT_ROOT not in sys.path:
 
 from modules.preprocessing import preprocess_image, get_preprocessing_stages
 from modules.segmentation import get_segmentation_stages
+from modules.feature_analysis import analyse_features
+from modules.reporting import generate_inspection_summary, format_defect_table_data
 
 OUTPUT_DIR_PRE = os.path.join(PROJECT_ROOT, "outputs", "preprocessing")
 OUTPUT_DIR_SEG = os.path.join(PROJECT_ROOT, "outputs", "segmentation")
@@ -256,13 +258,13 @@ with st.sidebar:
             <div class='sd'>Difference + Otsu + Morphology + Contours</div>
         </div>
 
-        <div class='sb-step-off'>
-            <div class='sn'>○ Feature Analysis</div>
+        <div class='sb-step-on'>
+            <div class='sn'>✦ Feature Analysis</div>
             <div class='sd'>Defect characteristic analysis</div>
         </div>
 
-        <div class='sb-step-off'>
-            <div class='sn'>○ Inspection Report</div>
+        <div class='sb-step-on'>
+            <div class='sn'>✦ Inspection Report</div>
             <div class='sd'>Result visualisation &amp; summary</div>
         </div>
     """, unsafe_allow_html=True)
@@ -306,7 +308,7 @@ with st.sidebar:
 
 st.markdown("""
 <div class='hero'>
-    <div class='hero-badge'>Modules 1 &amp; 2 — Integrated Inspection Pipeline</div>
+    <div class='hero-badge'>Modules 1, 2, 3 &amp; 4 — Integrated Inspection Pipeline</div>
     <div class='hero-title'>🔬 PCB Defect Inspection System</div>
     <div class='hero-subtitle'>
         Upload a defective PCB image and its matching template.
@@ -331,12 +333,12 @@ st.markdown("""
         <div class='plabel'>Segmentation</div>
     </div>
     <div class='pipe-arrow'>→</div>
-    <div class='pipe-step'>
+    <div class='pipe-step active'>
         <div class='icon'>📊</div>
         <div class='plabel'>Analysis</div>
     </div>
     <div class='pipe-arrow'>→</div>
-    <div class='pipe-step'>
+    <div class='pipe-step active'>
         <div class='icon'>📄</div>
         <div class='plabel'>Report</div>
     </div>
@@ -489,6 +491,14 @@ if defective_file is not None and template_file is not None:
                     processed_template
                 )
 
+                # ------------------------------
+                # Module 3: feature analysis
+                # ------------------------------
+                defects, analysis_metrics = analyse_features(
+                    seg_stages["morphology"],
+                    seg_metrics["contours"]
+                )
+
             proc_time = time.time() - t_start
 
             # Store in session state so tabs remain stable
@@ -501,6 +511,8 @@ if defective_file is not None and template_file is not None:
                 "processed_template": processed_template,
                 "seg_stages": seg_stages,
                 "seg_metrics": seg_metrics,
+                "defects": defects,
+                "analysis_metrics": analysis_metrics,
                 "proc_time": proc_time,
                 "test_name": defective_file.name,
                 "template_name": template_file.name,
@@ -553,9 +565,11 @@ if defective_file is not None and template_file is not None:
         # ------------------------------------------------------------
         # TOP TABS - user can click each module result
         # ------------------------------------------------------------
-        tab1, tab2 = st.tabs([
+        tab1, tab2, tab3, tab4 = st.tabs([
             "🖼️ Module 1 — Pre-processing",
             "🔍 Module 2 — Defect Segmentation",
+            "📊 Module 3 — Feature Analysis",
+            "📄 Module 4 — Inspection Report",
         ])
 
         # ============================================================
@@ -941,6 +955,281 @@ if defective_file is not None and template_file is not None:
                         mime="image/png",
                         use_container_width=True,
                     )
+
+        # ============================================================
+        # TAB 3 — MODULE 3
+        # ============================================================
+        with tab3:
+
+            st.markdown("<div class='section-label'>🔬 Module 3 — Feature Analysis Results</div>",
+                        unsafe_allow_html=True)
+
+            defects = result.get("defects", [])
+            analysis_metrics = result.get("analysis_metrics", {})
+
+            if not defects or analysis_metrics.get("total_defects", 0) == 0:
+                st.markdown("""
+                <div class='explain-card'>
+                    <div class='ec-title'>✓ No valid defect regions detected.</div>
+                    <div class='ec-desc'>
+                        The PCB inspection found no defects that match the segmentation criteria.
+                        The defective/test image appears to be structurally identical to the template.
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+
+                st.markdown("---")
+                st.markdown("<div class='section-label'>📊 Inspection-Level Metrics</div>",
+                            unsafe_allow_html=True)
+
+                total_defects = analysis_metrics.get("total_defects", 0)
+                total_area = analysis_metrics.get("total_defect_area", 0)
+                avg_area = analysis_metrics.get("average_area", 0.0)
+                largest = analysis_metrics.get("largest_defect", {})
+                largest_area = largest.get("area", 0) if largest else 0
+
+                st.markdown(f"""
+                <div class='qm-row'>
+                    <div class='qm-card'>
+                        <div class='qm-label'>Total Defects</div>
+                        <div class='qm-value'>{total_defects}</div>
+                        <div class='qm-delta pos'>Connected components identified</div>
+                    </div>
+                    <div class='qm-card'>
+                        <div class='qm-label'>Total Defect Area</div>
+                        <div class='qm-value'>{total_area} px²</div>
+                        <div class='qm-delta neu'>Sum of all defect regions</div>
+                    </div>
+                    <div class='qm-card'>
+                        <div class='qm-label'>Average Defect Area</div>
+                        <div class='qm-value'>{avg_area:.1f} px²</div>
+                        <div class='qm-delta neu'>Mean area per defect</div>
+                    </div>
+                    <div class='qm-card'>
+                        <div class='qm-label'>Largest Defect Area</div>
+                        <div class='qm-value'>{largest_area} px²</div>
+                        <div class='qm-delta pos'>Maximum defect size</div>
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+                st.markdown("---")
+                st.markdown("<div class='section-label'>📋 Individual Defect Features</div>",
+                            unsafe_allow_html=True)
+
+                # Build table data
+                table_data = []
+                for defect in defects:
+                    bbox = defect.get("bounding_box", {})
+                    loc = defect.get("location", {})
+                    table_data.append({
+                        "Defect ID": defect.get("id", ""),
+                        "Area (px²)": defect.get("area", 0),
+                        "Width (px)": defect.get("width", 0),
+                        "Height (px)": defect.get("height", 0),
+                        "Centroid X": f"{loc.get('x', 0):.1f}",
+                        "Centroid Y": f"{loc.get('y', 0):.1f}",
+                        "BBox X": bbox.get("x", 0),
+                        "BBox Y": bbox.get("y", 0),
+                        "BBox W": bbox.get("width", 0),
+                        "BBox H": bbox.get("height", 0),
+                    })
+
+                # Display table using st.dataframe
+                st.dataframe(
+                    table_data,
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        "Defect ID": st.column_config.NumberColumn(format="%d"),
+                        "Area (px²)": st.column_config.NumberColumn(format="%d"),
+                        "Width (px)": st.column_config.NumberColumn(format="%d"),
+                        "Height (px)": st.column_config.NumberColumn(format="%d"),
+                        "Centroid X": st.column_config.TextColumn(),
+                        "Centroid Y": st.column_config.TextColumn(),
+                        "BBox X": st.column_config.NumberColumn(format="%d"),
+                        "BBox Y": st.column_config.NumberColumn(format="%d"),
+                        "BBox W": st.column_config.NumberColumn(format="%d"),
+                        "BBox H": st.column_config.NumberColumn(format="%d"),
+                    }
+                )
+
+                st.markdown("---")
+                st.markdown("<div class='section-label'>📖 Module 3 — Feature Analysis Overview</div>",
+                            unsafe_allow_html=True)
+
+                st.markdown("""
+                <div class='explain-card'>
+                    <div class='ec-step'>Connected Component Analysis</div>
+                    <div class='ec-title'>✓ Defect Region Identification</div>
+                    <div class='ec-desc'>
+                        Module 3 performs connected component analysis on the morphologically-refined
+                        binary mask from Module 2. Each isolated defect region is identified and
+                        assigned a unique ID. Centroids, bounding boxes, and area measurements are
+                        extracted for each connected component using OpenCV's connectedComponentsWithStats().
+                    </div>
+                </div>
+
+                <div class='explain-card'>
+                    <div class='ec-step'>Feature Extraction</div>
+                    <div class='ec-title'>✓ Quantitative Defect Characterization</div>
+                    <div class='ec-desc'>
+                        For each defect:
+                        <br>• <strong>Area:</strong> Number of pixels in the defect region
+                        <br>• <strong>Width / Height:</strong> Dimensions of the bounding box
+                        <br>• <strong>Centroid:</strong> (X, Y) coordinates of the defect centre
+                        <br>• <strong>Bounding Box:</strong> (x, y, width, height) of the region
+                        <br><br>
+                        These measurements enable automated grading and statistical analysis
+                        for quality control workflows.
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+        # ============================================================
+        # TAB 4 — MODULE 4
+        # ============================================================
+        with tab4:
+
+            st.markdown("<div class='section-label'>🔬 Module 4 — Inspection Report Summary</div>",
+                        unsafe_allow_html=True)
+
+            defects = result.get("defects", [])
+            analysis_metrics = result.get("analysis_metrics", {})
+            test_name = result.get("test_name", "test_image.jpg")
+            template_name = result.get("template_name", "template_image.jpg")
+            proc_time = result.get("proc_time", 0.0)
+
+            # Generate inspection summary report
+            inspection_report = generate_inspection_summary(
+                test_filename=test_name,
+                template_filename=template_name,
+                processing_time=proc_time,
+                defects=defects,
+                analysis_metrics=analysis_metrics
+            )
+
+            st.markdown("---")
+            st.markdown("<div class='section-label'>📊 Inspection Summary Metrics</div>",
+                        unsafe_allow_html=True)
+
+            # Display high-level metrics
+            total_defects = inspection_report["total_defects"]
+            total_area = inspection_report["total_defect_area"]
+            avg_area = inspection_report["average_defect_area"]
+            largest_area = inspection_report["largest_defect_area"]
+            status = inspection_report["inspection_status"]
+
+            status_color = "#22c55e" if status == "No Defect Detected" else "#ef4444"
+            status_icon = "✓" if status == "No Defect Detected" else "⚠"
+
+            st.markdown(f"""
+            <div class='qm-row'>
+                <div class='qm-card'>
+                    <div class='qm-label'>Inspection Status</div>
+                    <div class='qm-value' style='color:{status_color};'>{status_icon} {status}</div>
+                    <div class='qm-delta neu'>Report generated at {inspection_report['timestamp']}</div>
+                </div>
+                <div class='qm-card'>
+                    <div class='qm-label'>Total Defects</div>
+                    <div class='qm-value'>{total_defects}</div>
+                    <div class='qm-delta neu'>Regions identified</div>
+                </div>
+                <div class='qm-card'>
+                    <div class='qm-label'>Total Defect Area</div>
+                    <div class='qm-value'>{total_area} px²</div>
+                    <div class='qm-delta neu'>Combined region size</div>
+                </div>
+                <div class='qm-card'>
+                    <div class='qm-label'>Processing Time</div>
+                    <div class='qm-value'>{proc_time:.2f}s</div>
+                    <div class='qm-delta neu'>Full pipeline execution</div>
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            st.markdown("---")
+            st.markdown("<div class='section-label'>📝 Automated Inspection Summary</div>",
+                        unsafe_allow_html=True)
+
+            st.markdown(f"""
+            <div class='explain-card'>
+                <div class='ec-desc'>
+                    {inspection_report['summary_text']}
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            st.markdown("---")
+            st.markdown("<div class='section-label'>📸 Final Inspection Visualisation</div>",
+                        unsafe_allow_html=True)
+
+            seg_stages = result.get("seg_stages", {})
+            overlay = seg_stages.get("overlay")
+
+            if overlay is not None:
+                # Display the overlay image
+                if len(overlay.shape) == 3:
+                    overlay_rgb = cv2.cvtColor(overlay, cv2.COLOR_BGR2RGB)
+                    st.image(overlay_rgb, use_container_width=True,
+                            caption="Final inspection result — detected defect regions highlighted by bounding boxes.")
+                else:
+                    st.image(overlay, clamp=True, channels="GRAY", use_container_width=True,
+                            caption="Final inspection result — detected defect regions highlighted by bounding boxes.")
+            else:
+                st.info("Overlay image is not available from segmentation.py.")
+
+            st.markdown("---")
+            st.markdown("<div class='section-label'>📋 Defect Detail Summary</div>",
+                        unsafe_allow_html=True)
+
+            if not defects or total_defects == 0:
+                st.markdown("""
+                <div class='explain-card'>
+                    <div class='ec-desc'>
+                        No individual defect measurements are available because no valid defect regions were detected.
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                # Build and display defect table
+                table_data = format_defect_table_data(defects)
+
+                st.dataframe(
+                    table_data,
+                    use_container_width=True,
+                    hide_index=True,
+                    column_config={
+                        "Defect ID": st.column_config.NumberColumn(format="%d"),
+                        "Area (px²)": st.column_config.NumberColumn(format="%d"),
+                        "Width (px)": st.column_config.NumberColumn(format="%d"),
+                        "Height (px)": st.column_config.NumberColumn(format="%d"),
+                        "Centroid X": st.column_config.TextColumn(),
+                        "Centroid Y": st.column_config.TextColumn(),
+                        "BBox (x, y, w, h)": st.column_config.TextColumn(),
+                    }
+                )
+
+            st.markdown("---")
+            st.markdown("<div class='section-label'>📊 Inspection Information</div>",
+                        unsafe_allow_html=True)
+
+            st.markdown(f"""
+            <div class='explain-card'>
+                <div class='ec-step'>Test Image</div>
+                <div class='ec-result'>{inspection_report['test_filename']}</div>
+
+                <div class='ec-step' style='margin-top:10px;'>Template Image</div>
+                <div class='ec-result'>{inspection_report['template_filename']}</div>
+
+                <div class='ec-step' style='margin-top:10px;'>Processing Time</div>
+                <div class='ec-result'>{inspection_report['processing_time']:.2f} seconds</div>
+
+                <div class='ec-step' style='margin-top:10px;'>Report Generated</div>
+                <div class='ec-result'>{inspection_report['timestamp']}</div>
+            </div>
+            """, unsafe_allow_html=True)
 
 else:
     st.info("👆 Upload both a defective/test PCB image and its matching template image to get started.")
