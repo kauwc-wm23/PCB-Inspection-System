@@ -43,7 +43,7 @@ Author:
 
 import cv2
 import numpy as np
-from typing import Tuple, List, Dict, Any
+from typing import Tuple, List, Dict, Any, Optional
 
 
 # =============================================================================
@@ -78,22 +78,21 @@ def _ensure_binary_uint8(mask: np.ndarray) -> np.ndarray:
     if mask.size == 0:
         raise ValueError("Input mask is empty.")
     
-    # Ensure it's uint8
-    if mask.dtype != np.uint8:
-        if mask.dtype == np.bool_ or mask.max() <= 1:
-            # Binary 0/1 format -> convert to 0/255
-            mask = (mask * 255).astype(np.uint8)
+    if mask.ndim == 3:
+        if mask.shape[2] == 1:
+            mask = mask[:, :, 0]
+        elif mask.shape[2] == 3:
+            mask = cv2.cvtColor(mask, cv2.COLOR_BGR2GRAY)
+        elif mask.shape[2] == 4:
+            mask = cv2.cvtColor(mask, cv2.COLOR_BGRA2GRAY)
         else:
-            # Normalize to 0-255 range
-            mask = cv2.normalize(
-                mask,
-                None,
-                0,
-                255,
-                cv2.NORM_MINMAX
-            ).astype(np.uint8)
-    
-    return mask
+            raise ValueError("Input mask has an unsupported channel count.")
+    elif mask.ndim != 2:
+        raise ValueError("Input mask must be a 2D or colour image array.")
+
+    # Connected-component analysis treats all non-zero values as foreground.
+    # Make that behaviour explicit and return a true 0/255 uint8 mask.
+    return np.where(mask > 0, 255, 0).astype(np.uint8)
 
 
 def _reconstruct_mask_from_contours(
@@ -146,7 +145,7 @@ def _reconstruct_mask_from_contours(
 
 def analyse_features(
     binary_mask: np.ndarray,
-    valid_contours: List[np.ndarray] = None
+    valid_contours: Optional[List[np.ndarray]] = None
 ) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
     """
     Extract defect features from a cleaned binary segmentation mask.
@@ -269,10 +268,14 @@ def analyse_features(
                 "width": width,
                 "height": height
             },
-            "location": {
-                "x": centre_x,
-                "y": centre_y
-            }
+                "location": {
+                    "x": centre_x,
+                    "y": centre_y
+                },
+                "centroid": {
+                    "x": centre_x,
+                    "y": centre_y
+                }
         }
 
         defects.append(defect)
@@ -406,11 +409,17 @@ def get_defect_bounding_region(
 
     bboxes = [d["bounding_box"] for d in defects]
 
-    x_min = min(bbox["x"] for bbox in bboxes)
-    y_min = min(bbox["y"] for bbox in bboxes)
+    if image_shape is None or len(image_shape) < 2:
+        raise ValueError("image_shape must contain height and width.")
+    image_height, image_width = int(image_shape[0]), int(image_shape[1])
+    if image_height <= 0 or image_width <= 0:
+        raise ValueError("image_shape dimensions must be positive.")
 
-    x_max = max(bbox["x"] + bbox["width"] for bbox in bboxes)
-    y_max = max(bbox["y"] + bbox["height"] for bbox in bboxes)
+    x_min = max(0, min(bbox["x"] for bbox in bboxes))
+    y_min = max(0, min(bbox["y"] for bbox in bboxes))
+
+    x_max = min(image_width, max(bbox["x"] + bbox["width"] for bbox in bboxes))
+    y_max = min(image_height, max(bbox["y"] + bbox["height"] for bbox in bboxes))
 
     width = x_max - x_min
     height = y_max - y_min

@@ -4,15 +4,16 @@ Module      : reporting.py
 Project     : PCB Defect Inspection System
 
 Description :
-    Module 4 — PCB Inspection Interface and Reporting Module.
+    Reporting support for Module 4 — PCB Inspection Interface.
 
     Processing Pipeline:
-        1. Consume processed results from Modules 1–3
+        1. Consume measured results from Modules 3 and 5
         2. Generate structured inspection summary report
         3. Provide GUI visualisation and automated report text
         4. Export results to PDF (optional)
 
-    This module performs ONLY presentation and reporting.
+    This module performs ONLY presentation and reporting. Module 5 remains
+    responsible for severity, priority, and spatial calculations.
     It does NOT perform preprocessing, segmentation, or feature extraction.
 
     Responsibilities:
@@ -37,7 +38,7 @@ Author:
 =============================================================================
 """
 
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from datetime import datetime
 
 
@@ -46,12 +47,13 @@ def generate_inspection_summary(
     template_filename: str,
     processing_time: float,
     defects: List[Dict[str, Any]],
-    analysis_metrics: Dict[str, Any]
+    analysis_metrics: Dict[str, Any],
+    evaluation_result: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     Generate a structured inspection summary report.
 
-    This function consumes results from Modules 1–3 and generates
+    This function consumes Module 3 features and Module 5 evaluation data to generate
     a high-level summary suitable for display and PDF export.
 
     Parameters
@@ -78,6 +80,10 @@ def generate_inspection_summary(
             - largest_defect
             - smallest_defect
 
+    evaluation_result : Dict[str, Any], optional
+        Authoritative severity, priority, and spatial metrics from Module 5.
+        If omitted, the legacy Module 3-only summary remains available.
+
     Returns
     -------
     Dict[str, Any]
@@ -98,23 +104,44 @@ def generate_inspection_summary(
 
     Notes
     -----
-    - If defects is empty, inspection_status = "No Defect Detected"
-    - If defects is non-empty, inspection_status = "Defects Detected"
+    - Module 5 results are used when ``evaluation_result`` is supplied.
+    - The legacy Module 3 status is retained only for backward compatibility.
     - The summary_text is generated automatically based on inspection results.
     - No defect classification is performed; results indicate "potential defects".
     """
 
-    total_defects = analysis_metrics.get("total_defects", 0)
-    total_area = analysis_metrics.get("total_defect_area", 0)
-    avg_area = analysis_metrics.get("average_area", 0.0)
-    largest_defect = analysis_metrics.get("largest_defect")
-    largest_area = largest_defect.get("area", 0) if largest_defect else 0
-
-    # Determine inspection status
-    if total_defects == 0:
-        inspection_status = "No Defect Detected"
+    if evaluation_result is not None:
+        total_defects = evaluation_result.get("total_defect_count", 0)
+        total_area = evaluation_result.get("total_defect_area", 0)
+        avg_area = evaluation_result.get("average_defect_area", 0.0)
+        largest_area = evaluation_result.get("largest_defect_area", 0)
+        inspection_status = evaluation_result.get("status_label", "NORMAL / PASS")
+        coverage = evaluation_result.get("defect_coverage_percentage", 0.0)
+        severity = evaluation_result.get("highest_severity_level", "N/A")
+        highest_priority_id = evaluation_result.get("highest_priority_defect_id", "N/A")
+        highest_priority_region = evaluation_result.get(
+            "highest_priority_defect_region", "N/A"
+        )
+        most_concentrated_region = evaluation_result.get("most_concentrated_region", "N/A")
+        largest_defect_region = evaluation_result.get("largest_defect_region", "N/A")
+        spatial_distribution = evaluation_result.get("spatial_distribution", {})
+        report_defects = evaluation_result.get("defects", defects)
     else:
-        inspection_status = "Defects Detected"
+        # Backward-compatible fallback for callers that do not yet pass Module 5.
+        total_defects = analysis_metrics.get("total_defects", 0)
+        total_area = analysis_metrics.get("total_defect_area", 0)
+        avg_area = analysis_metrics.get("average_area", 0.0)
+        largest_defect = analysis_metrics.get("largest_defect")
+        largest_area = largest_defect.get("area", 0) if largest_defect else 0
+        inspection_status = "No Defect Detected" if total_defects == 0 else "Defects Detected"
+        coverage = 0.0
+        severity = "N/A" if total_defects == 0 else "Not assessed"
+        highest_priority_id = "N/A"
+        highest_priority_region = "N/A"
+        most_concentrated_region = "N/A"
+        largest_defect_region = "N/A"
+        spatial_distribution = {}
+        report_defects = defects
 
     # Generate automated summary text
     if total_defects == 0:
@@ -128,9 +155,12 @@ def generate_inspection_summary(
 
         summary_text = (
             f"Inspection completed successfully. A total of {total_defects} potential defect "
-            f"{region_word} were detected. The combined defect area was {total_area} px², "
-            f"with an average defect area of {avg_area:.1f} px². "
-            f"The largest detected defect region measured {largest_area} px²."
+            f"{region_word} were detected. The combined defect area was {total_area} pixels, "
+            f"with an average defect area of {avg_area:.1f} pixels. "
+            f"The largest detected defect region measured {largest_area} pixels. "
+            f"Detected coverage was {coverage:.4f}%. The highest-priority defect was "
+            f"Defect #{highest_priority_id} ({severity}) in {highest_priority_region}. "
+            f"The most concentrated region was {most_concentrated_region}."
         )
 
     # Build report dictionary
@@ -144,8 +174,15 @@ def generate_inspection_summary(
         "total_defect_area": total_area,
         "average_defect_area": avg_area,
         "largest_defect_area": largest_area,
+        "defect_coverage_percentage": coverage,
+        "severity": severity,
+        "highest_priority_defect_id": highest_priority_id,
+        "highest_priority_defect_region": highest_priority_region,
+        "most_concentrated_region": most_concentrated_region,
+        "largest_defect_region": largest_defect_region,
+        "spatial_distribution": spatial_distribution,
         "summary_text": summary_text,
-        "defects": defects,
+        "defects": report_defects,
     }
 
     return report
@@ -155,13 +192,13 @@ def format_defect_table_data(defects: List[Dict[str, Any]]) -> List[Dict[str, An
     """
     Format defects for tabular display.
 
-    Extracts and formats defect data from Module 3 output for
-    presentation in a data table.
+    Formats Module 3 measurements enriched by Module 5 severity and spatial
+    assessment for presentation in a data table.
 
     Parameters
     ----------
     defects : List[Dict[str, Any]]
-        List of defect dictionaries from Module 3 analyse_features().
+        Module 5 defect dictionaries (or legacy Module 3 dictionaries).
 
     Returns
     -------
@@ -191,6 +228,11 @@ def format_defect_table_data(defects: List[Dict[str, Any]]) -> List[Dict[str, An
             "Centroid X": f"{loc.get('x', 0):.1f}",
             "Centroid Y": f"{loc.get('y', 0):.1f}",
             "BBox (x, y, w, h)": f"({bbox.get('x', 0)}, {bbox.get('y', 0)}, {bbox.get('width', 0)}, {bbox.get('height', 0)})",
+            "Area Ratio (%)": f"{defect.get('area_ratio', 0.0) * 100:.4f}",
+            "Severity Score": f"{defect.get('severity_score', 0.0):.6f}",
+            "Severity": defect.get("severity_level", "N/A"),
+            "Priority": defect.get("priority_rank", "N/A"),
+            "Region": defect.get("spatial_region", "N/A"),
         }
         table_data.append(row)
 

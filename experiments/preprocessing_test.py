@@ -8,7 +8,7 @@ Description :
     Image Pre-processing and Calibration.
 
     This script verifies that preprocessing.py works correctly by:
-        1. Loading one PCB image from the DeepPCB training set
+        1. Discovering one PCB image from PCB-DATASET
         2. Running each pipeline step individually
         3. Visualising all intermediate and final results
 
@@ -60,15 +60,17 @@ from modules.preprocessing import (
     apply_median_filter,
     apply_clahe,
 )
+from modules.dataset_paths import discover_dataset_images
 
 # =============================================================================
 # Configuration
 # =============================================================================
 
-# Path to one PCB sample image from the DeepPCB training set
-IMAGE_PATH = os.path.join(
-    PROJECT_ROOT, "dataset", "DeepPCB", "train", "images", "01_PCB__1.jpg"
-)
+# Discover a real sample recursively instead of hardcoding a category/filename.
+_dataset_images = discover_dataset_images()
+if not _dataset_images:
+    raise FileNotFoundError("No PCB images found under dataset/images/.")
+IMAGE_PATH = str(_dataset_images[0])
 
 # Directory where result figures will be saved (outputs/)
 OUTPUT_DIR = os.path.join(PROJECT_ROOT, "outputs", "preprocessing")
@@ -102,7 +104,7 @@ print(
 gray = convert_grayscale(image_resized)
 print(f"[test] Grayscale   : shape={gray.shape}, dtype={gray.dtype}")
 
-# --- Step 4: Median filtering (noise reduction) ---
+# --- Step 4: Median filtering (potential impulse-noise suppression) ---
 filtered = apply_median_filter(gray)
 print(f"[test] Median      : shape={filtered.shape}, dtype={filtered.dtype}")
 
@@ -210,7 +212,7 @@ ax_med.axis("off")
 ax_med.text(
     0.5,
     -0.06,
-    f"Mean pixel: {filtered.mean():.1f}  |  noise reduced",
+    f"Mean pixel: {filtered.mean():.1f}  |  5x5 median output",
     transform=ax_med.transAxes,
     ha="center",
     fontsize=7.5,
@@ -293,7 +295,8 @@ print(f"  Final shape    : {processed.shape}")
 print(f"  Output figures : outputs/fig1_original_pcb.png")
 print(f"                   outputs/fig2_pipeline_comparison.png")
 print("=" * 60)
-print("\n[test] Displaying figures... (close windows to exit)\n")
-
-# Show both figures interactively
-plt.show()
+if "agg" not in plt.get_backend().lower():
+    print("\n[test] Displaying figures... (close windows to exit)\n")
+    plt.show()
+else:
+    print("\n[test] Non-interactive backend detected; figures were saved without opening windows.\n")

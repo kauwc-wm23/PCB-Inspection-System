@@ -29,7 +29,7 @@ Notes:
 
 import cv2
 import numpy as np
-from typing import Tuple, List, Dict, Any
+from typing import Tuple, List, Dict, Any, Optional
 
 
 # =============================================================================
@@ -40,7 +40,11 @@ KERNEL_OPEN_SIZE = 3
 KERNEL_CLOSE_SIZE = 3
 
 MIN_DEFECT_AREA = 15
-MAX_DEFECT_AREA = 5000
+MAX_DEFECT_AREA = 50000
+
+# JPEG recompression creates weak differences across otherwise identical
+# PCB-DATASET image pairs. Suppress that measured low-level noise before Otsu.
+DIFFERENCE_NOISE_FLOOR = 6
 
 # Keep disabled unless weak defect regions need slight expansion.
 EXTRA_DILATION_ITERATIONS = 0
@@ -58,11 +62,23 @@ def _to_gray(image: np.ndarray) -> np.ndarray:
     if image is None:
         raise ValueError("Input image is None.")
 
-    if len(image.shape) == 3:
-        image = cv2.cvtColor(
-            image,
-            cv2.COLOR_BGR2GRAY
-        )
+    if not isinstance(image, np.ndarray):
+        raise ValueError("Input image must be a NumPy array.")
+
+    if image.size == 0:
+        raise ValueError("Input image is empty.")
+
+    if image.ndim == 3:
+        if image.shape[2] == 1:
+            image = image[:, :, 0]
+        elif image.shape[2] == 3:
+            image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        elif image.shape[2] == 4:
+            image = cv2.cvtColor(image, cv2.COLOR_BGRA2GRAY)
+        else:
+            raise ValueError("Input image has an unsupported channel count.")
+    elif image.ndim != 2:
+        raise ValueError("Input image must be 2D grayscale or 3D colour.")
 
     if image.dtype != np.uint8:
         image = cv2.normalize(
@@ -105,12 +121,12 @@ def compute_difference(
     test_gray = _to_gray(test_image)
     template_gray = _to_gray(template_image)
 
-    # Ensure both images have the same dimensions.
+    # A resized reference would invalidate annotation coordinates and can
+    # create false differences. Require a correctly matched image pair.
     if template_gray.shape != test_gray.shape:
-        template_gray = cv2.resize(
-            template_gray,
-            (test_gray.shape[1], test_gray.shape[0]),
-            interpolation=cv2.INTER_AREA
+        raise ValueError(
+            "Test and template images must have identical dimensions; "
+            f"received {test_gray.shape} and {template_gray.shape}."
         )
 
     difference = cv2.absdiff(
@@ -126,7 +142,8 @@ def compute_difference(
 # =============================================================================
 
 def apply_otsu_threshold(
-    difference_image: np.ndarray
+    difference_image: np.ndarray,
+    noise_floor: int = DIFFERENCE_NOISE_FLOOR,
 ) -> Tuple[np.ndarray, float]:
     """
     Convert the difference image into a binary defect mask using
@@ -143,6 +160,9 @@ def apply_otsu_threshold(
 
     gray = _to_gray(difference_image)
 
+    if not isinstance(noise_floor, int) or not 0 <= noise_floor <= 255:
+        raise ValueError("noise_floor must be an integer from 0 to 255.")
+
     # Slight smoothing suppresses isolated high-frequency differences
     # before thresholding.
     blurred = cv2.GaussianBlur(
@@ -151,8 +171,13 @@ def apply_otsu_threshold(
         0
     )
 
+    # Discard measured low-level JPEG/recompression differences. Otsu remains
+    # responsible for automatically separating the remaining candidate pixels.
+    noise_suppressed = blurred.copy()
+    noise_suppressed[noise_suppressed < noise_floor] = 0
+
     otsu_value, binary = cv2.threshold(
-        blurred,
+        noise_suppressed,
         0,
         255,
         cv2.THRESH_BINARY + cv2.THRESH_OTSU
@@ -234,7 +259,9 @@ def apply_morphological_processing(
 # =============================================================================
 
 def detect_defect_contours(
-    cleaned_mask: np.ndarray
+    cleaned_mask: np.ndarray,
+    min_area: float = MIN_DEFECT_AREA,
+    max_area: Optional[float] = MAX_DEFECT_AREA,
 ) -> List[np.ndarray]:
     """
     Detect independent defect regions from the cleaned binary mask.
@@ -247,6 +274,11 @@ def detect_defect_contours(
     """
 
     cleaned_mask = _to_gray(cleaned_mask)
+
+    if min_area < 0:
+        raise ValueError("min_area cannot be negative.")
+    if max_area is not None and max_area < min_area:
+        raise ValueError("max_area must be greater than or equal to min_area.")
 
     contours, _ = cv2.findContours(
         cleaned_mask,
@@ -261,11 +293,11 @@ def detect_defect_contours(
         area = cv2.contourArea(contour)
 
         # Remove extremely small noise.
-        if area < MIN_DEFECT_AREA:
+        if area < min_area:
             continue
 
         # Remove abnormally large difference regions.
-        if area > MAX_DEFECT_AREA:
+        if max_area is not None and area > max_area:
             continue
 
         valid_contours.append(contour)
@@ -331,7 +363,10 @@ def create_defect_overlay(
 
 def segment_image(
     test_image: np.ndarray,
-    template_image: np.ndarray
+    template_image: np.ndarray,
+    noise_floor: int = DIFFERENCE_NOISE_FLOOR,
+    min_defect_area: float = MIN_DEFECT_AREA,
+    max_defect_area: Optional[float] = MAX_DEFECT_AREA,
 ) -> Tuple[
     np.ndarray,
     np.ndarray,
@@ -378,7 +413,8 @@ def segment_image(
     # -------------------------------------------------------------------------
 
     binary, otsu_value = apply_otsu_threshold(
-        difference
+        difference,
+        noise_floor=noise_floor,
     )
 
     # -------------------------------------------------------------------------
@@ -394,7 +430,9 @@ def segment_image(
     # -------------------------------------------------------------------------
 
     contours = detect_defect_contours(
-        cleaned_mask
+        cleaned_mask,
+        min_area=min_defect_area,
+        max_area=max_defect_area,
     )
 
     return (
@@ -413,7 +451,10 @@ def segment_image(
 
 def get_segmentation_stages(
     test_image: np.ndarray,
-    template_image: np.ndarray
+    template_image: np.ndarray,
+    noise_floor: int = DIFFERENCE_NOISE_FLOOR,
+    min_defect_area: float = MIN_DEFECT_AREA,
+    max_defect_area: Optional[float] = MAX_DEFECT_AREA,
 ) -> Tuple[Dict[str, np.ndarray], Dict[str, Any]]:
     """
     Run Module 2 and provide intermediate segmentation results
@@ -432,7 +473,10 @@ def get_segmentation_stages(
         otsu_value
     ) = segment_image(
         test_image,
-        template_image
+        template_image,
+        noise_floor=noise_floor,
+        min_defect_area=min_defect_area,
+        max_defect_area=max_defect_area,
     )
 
     # Stage 7 — visualisation only
@@ -445,12 +489,10 @@ def get_segmentation_stages(
     # Overall segmentation statistics
     # -------------------------------------------------------------------------
 
-    defect_area_px = int(
-        sum(
-            cv2.contourArea(contour)
-            for contour in contours
-        )
-    )
+    valid_mask = np.zeros(cleaned_mask.shape, dtype=np.uint8)
+    if contours:
+        cv2.drawContours(valid_mask, contours, -1, 255, cv2.FILLED)
+    defect_area_px = int(cv2.countNonZero(valid_mask))
 
     image_height, image_width = cleaned_mask.shape[:2]
     image_area = image_height * image_width
@@ -481,6 +523,9 @@ def get_segmentation_stages(
 
     metrics = {
         "threshold": round(otsu_value, 2),
+        "noise_floor": noise_floor,
+        "min_defect_area": min_defect_area,
+        "max_defect_area": max_defect_area,
         "defect_count": len(contours),
         "defect_area_px": defect_area_px,
         "defect_area_pct": round(defect_area_pct, 4),
