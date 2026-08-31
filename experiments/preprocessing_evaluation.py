@@ -1,8 +1,3 @@
-"""Reproducible evidence for the production median-filter and CLAHE settings.
-
-Synthetic impulse noise is used only in the controlled restoration experiment.
-It is never passed to the production PCB inspection or segmentation workflow.
-"""
 
 import argparse
 import csv
@@ -59,12 +54,6 @@ def add_salt_and_pepper_noise(
     density: float,
     generator: np.random.Generator,
 ) -> Tuple[np.ndarray, int, int]:
-    """Corrupt exactly ``density`` of pixel locations with salt or pepper.
-
-    Half of the selected locations are assigned 0 and the rest 255. A selected
-    location can already contain the assigned value; the documented density is
-    therefore the injected-location density, not a claim about changed pixels.
-    """
     if clean.ndim != 2 or clean.dtype != np.uint8 or clean.size == 0:
         raise ValueError("Controlled noise requires a non-empty uint8 grayscale image.")
     if not 0 < density < 1:
@@ -81,13 +70,11 @@ def add_salt_and_pepper_noise(
 
 
 def mean_squared_error(reference: np.ndarray, candidate: np.ndarray) -> float:
-    """Return full-reference pixel MSE."""
     difference = reference.astype(np.float32) - candidate.astype(np.float32)
     return float(np.mean(difference * difference, dtype=np.float64))
 
 
 def peak_signal_to_noise_ratio(mse: float) -> Optional[float]:
-    """Return finite 8-bit PSNR, or ``None`` for an identical image."""
     if mse < 0 or not math.isfinite(mse):
         raise ValueError("MSE must be finite and non-negative.")
     if mse == 0:
@@ -96,7 +83,6 @@ def peak_signal_to_noise_ratio(mse: float) -> Optional[float]:
 
 
 def gradient_magnitude(image: np.ndarray) -> np.ndarray:
-    """Return 3x3 Sobel gradient magnitudes for an edge/detail comparison."""
     horizontal = cv2.Sobel(image, cv2.CV_32F, 1, 0, ksize=3)
     vertical = cv2.Sobel(image, cv2.CV_32F, 0, 1, ksize=3)
     return cv2.magnitude(horizontal, vertical)
@@ -105,11 +91,6 @@ def gradient_magnitude(image: np.ndarray) -> np.ndarray:
 def gradient_cosine_similarity(
     reference_gradient: np.ndarray, candidate: np.ndarray
 ) -> Optional[float]:
-    """Compare edge-gradient layout with the known clean/reference input.
-
-    This is a structural indicator, not a perceptual quality score. Values near
-    one mean that gradient magnitudes have a similar spatial pattern.
-    """
     candidate_gradient = gradient_magnitude(candidate)
     numerator = float(
         np.sum(reference_gradient * candidate_gradient, dtype=np.float64)
@@ -450,7 +431,6 @@ def _plot_image_grid(
 
 
 def _validate_finite(rows: Sequence[Dict], allowed_blank: Sequence[str] = ()) -> None:
-    """Reject unexpected NaN/Infinity before results are accepted."""
     for row in rows:
         for key, value in row.items():
             if value is None:

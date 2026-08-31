@@ -1,63 +1,27 @@
-"""
-=============================================================================
-Module      : segmentation.py
-Project     : PCB Defect Inspection System
-
-Description :
-    Module 2 — Defect Segmentation and Detection.
-
-    Processing Pipeline:
-        1. Compare preprocessed defective PCB with defect-free template
-        2. Compute absolute image difference
-        3. Apply Otsu automatic thresholding
-        4. Apply Morphological Opening
-        5. Apply Morphological Closing
-        6. Detect defect contours
-        7. Visualise detected defect regions
-
-Output:
-    Segmented defect regions represented by contours.
-
-Notes:
-    - Both test and template images should be preprocessed using the same
-      Module 1 pipeline before entering this module.
-    - Template and test images must represent the same PCB type/orientation.
-    - Feature extraction such as area, width, height, bounding-box
-      measurements and defect location is handled by Module 3.
-=============================================================================
-"""
 
 import cv2
 import numpy as np
 from typing import Tuple, List, Dict, Any, Optional
 
 
-# =============================================================================
-# Constants / Hyperparameters
-# =============================================================================
 
 KERNEL_OPEN_SIZE = 3
 KERNEL_CLOSE_SIZE = 3
+MORPHOLOGY_KERNEL_SHAPE = cv2.MORPH_ELLIPSE
+MORPHOLOGY_KERNEL_SHAPE_LABEL = "Ellipse"
+OPENING_ITERATIONS = 1
+CLOSING_ITERATIONS = 1
 
 MIN_DEFECT_AREA = 15
 MAX_DEFECT_AREA = 50000
 
-# JPEG recompression creates weak differences across otherwise identical
-# PCB-DATASET image pairs. Suppress that measured low-level noise before Otsu.
 DIFFERENCE_NOISE_FLOOR = 6
 
-# Keep disabled unless weak defect regions need slight expansion.
 EXTRA_DILATION_ITERATIONS = 0
 
 
-# =============================================================================
-# Helper
-# =============================================================================
 
 def _to_gray(image: np.ndarray) -> np.ndarray:
-    """
-    Ensure input image is uint8 single-channel grayscale.
-    """
 
     if image is None:
         raise ValueError("Input image is None.")
@@ -80,7 +44,9 @@ def _to_gray(image: np.ndarray) -> np.ndarray:
     elif image.ndim != 2:
         raise ValueError("Input image must be 2D grayscale or 3D colour.")
 
-    if image.dtype != np.uint8:
+    if np.issubdtype(image.dtype, np.bool_):
+        image = image.astype(np.uint8) * 255
+    elif image.dtype != np.uint8:
         image = cv2.normalize(
             image,
             None,
@@ -92,37 +58,15 @@ def _to_gray(image: np.ndarray) -> np.ndarray:
     return image
 
 
-# =============================================================================
-# Step 1 — Reference Difference
-# =============================================================================
 
 def compute_difference(
     test_image: np.ndarray,
     template_image: np.ndarray
 ) -> np.ndarray:
-    """
-    Compute the absolute pixel-level difference between the defective
-    PCB image and the corresponding defect-free template.
-
-    Parameters
-    ----------
-    test_image : np.ndarray
-        Preprocessed defective PCB image.
-
-    template_image : np.ndarray
-        Preprocessed defect-free template image.
-
-    Returns
-    -------
-    np.ndarray
-        Absolute difference image.
-    """
 
     test_gray = _to_gray(test_image)
     template_gray = _to_gray(template_image)
 
-    # A resized reference would invalidate annotation coordinates and can
-    # create false differences. Require a correctly matched image pair.
     if template_gray.shape != test_gray.shape:
         raise ValueError(
             "Test and template images must have identical dimensions; "
@@ -137,42 +81,23 @@ def compute_difference(
     return difference
 
 
-# =============================================================================
-# Step 2 — Otsu Thresholding
-# =============================================================================
 
 def apply_otsu_threshold(
     difference_image: np.ndarray,
     noise_floor: int = DIFFERENCE_NOISE_FLOOR,
 ) -> Tuple[np.ndarray, float]:
-    """
-    Convert the difference image into a binary defect mask using
-    Otsu's automatic global thresholding.
-
-    Returns
-    -------
-    binary : np.ndarray
-        Binary defect candidate mask.
-
-    otsu_value : float
-        Automatically selected Otsu threshold.
-    """
 
     gray = _to_gray(difference_image)
 
     if not isinstance(noise_floor, int) or not 0 <= noise_floor <= 255:
         raise ValueError("noise_floor must be an integer from 0 to 255.")
 
-    # Slight smoothing suppresses isolated high-frequency differences
-    # before thresholding.
     blurred = cv2.GaussianBlur(
         gray,
         (3, 3),
         0
     )
 
-    # Discard measured low-level JPEG/recompression differences. Otsu remains
-    # responsible for automatically separating the remaining candidate pixels.
     noise_suppressed = blurred.copy()
     noise_suppressed[noise_suppressed < noise_floor] = 0
 
@@ -183,7 +108,6 @@ def apply_otsu_threshold(
         cv2.THRESH_BINARY + cv2.THRESH_OTSU
     )
 
-    # Optional dilation.
     if EXTRA_DILATION_ITERATIONS > 0:
 
         kernel = np.ones(
@@ -200,78 +124,182 @@ def apply_otsu_threshold(
     return binary, float(otsu_value)
 
 
-# =============================================================================
-# Step 3 — Morphological Processing
-# =============================================================================
 
 def apply_morphological_processing(
     binary: np.ndarray
 ) -> Tuple[np.ndarray, np.ndarray]:
-    """
-    Apply morphological Opening followed by Closing.
-
-    Opening:
-        Removes small isolated foreground noise.
-
-    Closing:
-        Fills small gaps and improves continuity of detected regions.
-
-    Returns
-    -------
-    opened : np.ndarray
-        Binary mask after morphological opening.
-
-    closed : np.ndarray
-        Binary mask after morphological closing.
-    """
 
     binary = _to_gray(binary)
 
     open_kernel = cv2.getStructuringElement(
-        cv2.MORPH_ELLIPSE,
+        MORPHOLOGY_KERNEL_SHAPE,
         (KERNEL_OPEN_SIZE, KERNEL_OPEN_SIZE)
     )
 
     close_kernel = cv2.getStructuringElement(
-        cv2.MORPH_ELLIPSE,
+        MORPHOLOGY_KERNEL_SHAPE,
         (KERNEL_CLOSE_SIZE, KERNEL_CLOSE_SIZE)
     )
 
-    # Opening = erosion followed by dilation.
     opened = cv2.morphologyEx(
         binary,
         cv2.MORPH_OPEN,
-        open_kernel
+        open_kernel,
+        iterations=OPENING_ITERATIONS,
     )
 
-    # Closing = dilation followed by erosion.
     closed = cv2.morphologyEx(
         opened,
         cv2.MORPH_CLOSE,
-        close_kernel
+        close_kernel,
+        iterations=CLOSING_ITERATIONS,
     )
 
     return opened, closed
 
 
-# =============================================================================
-# Step 4 — Contour Detection
-# =============================================================================
+def count_foreground_components(mask: np.ndarray) -> int:
+
+    foreground = (_to_gray(mask) > 0).astype(np.uint8)
+    label_count, _ = cv2.connectedComponents(foreground, connectivity=8)
+    return max(int(label_count) - 1, 0)
+
+
+def analyse_morphology_effects(
+    pre_morphology: np.ndarray,
+    opened: np.ndarray,
+    closed: np.ndarray,
+) -> Tuple[Dict[str, np.ndarray], Dict[str, Dict[str, Any]]]:
+
+    pre_mask = _to_gray(pre_morphology)
+    opened_mask = _to_gray(opened)
+    closed_mask = _to_gray(closed)
+
+    if pre_mask.shape != opened_mask.shape or opened_mask.shape != closed_mask.shape:
+        raise ValueError("Morphology masks must have identical dimensions.")
+
+    pre_foreground = pre_mask > 0
+    opened_foreground = opened_mask > 0
+    closed_foreground = closed_mask > 0
+
+    opening_removed = np.where(
+        pre_foreground & ~opened_foreground,
+        255,
+        0,
+    ).astype(np.uint8)
+    closing_added = np.where(
+        closed_foreground & ~opened_foreground,
+        255,
+        0,
+    ).astype(np.uint8)
+
+    opening_before = int(np.count_nonzero(pre_foreground))
+    opening_after = int(np.count_nonzero(opened_foreground))
+    opening_removed_count = int(cv2.countNonZero(opening_removed))
+    opening_components_before = count_foreground_components(pre_mask)
+    opening_components_after = count_foreground_components(opened_mask)
+
+    closing_before = opening_after
+    closing_after = int(np.count_nonzero(closed_foreground))
+    closing_added_count = int(cv2.countNonZero(closing_added))
+    closing_components_before = opening_components_after
+    closing_components_after = count_foreground_components(closed_mask)
+
+    change_maps = {
+        "opening_removed": opening_removed,
+        "closing_added": closing_added,
+    }
+    measurements = {
+        "opening": {
+            "foreground_before": opening_before,
+            "foreground_after": opening_after,
+            "pixel_change": opening_removed_count,
+            "change_percentage": (
+                (opening_removed_count / opening_before) * 100.0
+                if opening_before > 0
+                else 0.0
+            ),
+            "components_before": opening_components_before,
+            "components_after": opening_components_after,
+            "component_difference": (
+                opening_components_before - opening_components_after
+            ),
+        },
+        "closing": {
+            "foreground_before": closing_before,
+            "foreground_after": closing_after,
+            "pixel_change": closing_added_count,
+            "change_percentage": (
+                (closing_added_count / closing_before) * 100.0
+                if closing_before > 0
+                else 0.0
+            ),
+            "components_before": closing_components_before,
+            "components_after": closing_components_after,
+            "component_difference": (
+                closing_components_before - closing_components_after
+            ),
+        },
+    }
+
+    return change_maps, measurements
+
+
+def extract_change_detail_roi(
+    change_map: np.ndarray,
+    padding_fraction: float = 0.20,
+    minimum_image_padding_fraction: float = 0.02,
+) -> Tuple[Optional[np.ndarray], Optional[Tuple[int, int, int, int]]]:
+
+    if not isinstance(padding_fraction, (int, float)) or not 0 <= padding_fraction <= 1:
+        raise ValueError("padding_fraction must be between 0 and 1.")
+    if (
+        not isinstance(minimum_image_padding_fraction, (int, float))
+        or not 0 <= minimum_image_padding_fraction <= 1
+    ):
+        raise ValueError(
+            "minimum_image_padding_fraction must be between 0 and 1."
+        )
+
+    display_map = _to_gray(change_map)
+    changed_y, changed_x = np.nonzero(display_map)
+    if changed_x.size == 0:
+        return None, None
+
+    image_height, image_width = display_map.shape
+    x_start = int(changed_x.min())
+    x_end = int(changed_x.max()) + 1
+    y_start = int(changed_y.min())
+    y_end = int(changed_y.max()) + 1
+
+    change_width = x_end - x_start
+    change_height = y_end - y_start
+    x_padding = max(
+        1,
+        int(np.ceil(change_width * padding_fraction)),
+        int(np.ceil(image_width * minimum_image_padding_fraction)),
+    )
+    y_padding = max(
+        1,
+        int(np.ceil(change_height * padding_fraction)),
+        int(np.ceil(image_height * minimum_image_padding_fraction)),
+    )
+
+    x_start = max(0, x_start - x_padding)
+    y_start = max(0, y_start - y_padding)
+    x_end = min(image_width, x_end + x_padding)
+    y_end = min(image_height, y_end + y_padding)
+    bounds = (x_start, y_start, x_end, y_end)
+
+    return display_map[y_start:y_end, x_start:x_end].copy(), bounds
+
+
 
 def detect_defect_contours(
     cleaned_mask: np.ndarray,
     min_area: float = MIN_DEFECT_AREA,
     max_area: Optional[float] = MAX_DEFECT_AREA,
 ) -> List[np.ndarray]:
-    """
-    Detect independent defect regions from the cleaned binary mask.
-
-    The detected contours represent the final segmentation output
-    of Module 2.
-
-    Quantitative feature extraction from these contours is handled
-    separately by Module 3.
-    """
 
     cleaned_mask = _to_gray(cleaned_mask)
 
@@ -292,11 +320,9 @@ def detect_defect_contours(
 
         area = cv2.contourArea(contour)
 
-        # Remove extremely small noise.
         if area < min_area:
             continue
 
-        # Remove abnormally large difference regions.
         if max_area is not None and area > max_area:
             continue
 
@@ -305,23 +331,11 @@ def detect_defect_contours(
     return valid_contours
 
 
-# =============================================================================
-# Step 5 — Defect Overlay
-# =============================================================================
 
 def create_defect_overlay(
     test_image: np.ndarray,
     contours: List[np.ndarray]
 ) -> np.ndarray:
-    """
-    Create a visual representation of the regions detected by Module 2.
-
-    Rectangles are used only for visual localisation in the GUI.
-    Their dimensions, areas and coordinates are NOT extracted or
-    reported as Module 2 features.
-
-    Feature analysis is handled by Module 3.
-    """
 
     test_gray = _to_gray(test_image)
 
@@ -332,7 +346,6 @@ def create_defect_overlay(
 
     for index, contour in enumerate(contours, start=1):
 
-        # Used only to draw the detected region.
         x, y, w, h = cv2.boundingRect(contour)
 
         cv2.rectangle(
@@ -357,9 +370,6 @@ def create_defect_overlay(
     return overlay
 
 
-# =============================================================================
-# Complete Module 2 Pipeline
-# =============================================================================
 
 def segment_image(
     test_image: np.ndarray,
@@ -375,59 +385,24 @@ def segment_image(
     List[np.ndarray],
     float
 ]:
-    """
-    Execute the complete Module 2 segmentation pipeline.
 
-    Returns
-    -------
-    difference :
-        Absolute difference image.
-
-    binary :
-        Otsu thresholded binary mask.
-
-    opened :
-        Binary mask after morphological opening.
-
-    cleaned_mask :
-        Final binary mask after morphological closing.
-
-    contours :
-        Detected defect regions.
-
-    otsu_value :
-        Automatically selected Otsu threshold.
-    """
-
-    # -------------------------------------------------------------------------
-    # Step 1 — Absolute Difference
-    # -------------------------------------------------------------------------
 
     difference = compute_difference(
         test_image,
         template_image
     )
 
-    # -------------------------------------------------------------------------
-    # Step 2 — Otsu Thresholding
-    # -------------------------------------------------------------------------
 
     binary, otsu_value = apply_otsu_threshold(
         difference,
         noise_floor=noise_floor,
     )
 
-    # -------------------------------------------------------------------------
-    # Step 3 — Morphological Opening + Closing
-    # -------------------------------------------------------------------------
 
     opened, cleaned_mask = apply_morphological_processing(
         binary
     )
 
-    # -------------------------------------------------------------------------
-    # Step 4 — Contour Detection
-    # -------------------------------------------------------------------------
 
     contours = detect_defect_contours(
         cleaned_mask,
@@ -445,9 +420,6 @@ def segment_image(
     )
 
 
-# =============================================================================
-# GUI Adapter
-# =============================================================================
 
 def get_segmentation_stages(
     test_image: np.ndarray,
@@ -456,13 +428,6 @@ def get_segmentation_stages(
     min_defect_area: float = MIN_DEFECT_AREA,
     max_defect_area: Optional[float] = MAX_DEFECT_AREA,
 ) -> Tuple[Dict[str, np.ndarray], Dict[str, Any]]:
-    """
-    Run Module 2 and provide intermediate segmentation results
-    and overall segmentation statistics for the GUI.
-
-    Detailed feature extraction for individual defects is handled
-    by Module 3.
-    """
 
     (
         difference,
@@ -479,15 +444,17 @@ def get_segmentation_stages(
         max_defect_area=max_defect_area,
     )
 
-    # Stage 7 — visualisation only
     overlay = create_defect_overlay(
         test_image,
         contours
     )
 
-    # -------------------------------------------------------------------------
-    # Overall segmentation statistics
-    # -------------------------------------------------------------------------
+    morphology_change_maps, morphology_analysis = analyse_morphology_effects(
+        binary,
+        opened,
+        cleaned_mask,
+    )
+
 
     valid_mask = np.zeros(cleaned_mask.shape, dtype=np.uint8)
     if contours:
@@ -503,9 +470,6 @@ def get_segmentation_stages(
         else 0.0
     )
 
-    # -------------------------------------------------------------------------
-    # GUI stages
-    # -------------------------------------------------------------------------
 
     stages = {
         "test_image": _to_gray(test_image),
@@ -514,12 +478,11 @@ def get_segmentation_stages(
         "otsu_binary": binary,
         "opening": opened,
         "morphology": cleaned_mask,
+        "opening_removed": morphology_change_maps["opening_removed"],
+        "closing_added": morphology_change_maps["closing_added"],
         "overlay": overlay
     }
 
-    # -------------------------------------------------------------------------
-    # Module 2 overall metrics
-    # -------------------------------------------------------------------------
 
     metrics = {
         "threshold": round(otsu_value, 2),
@@ -529,7 +492,20 @@ def get_segmentation_stages(
         "defect_count": len(contours),
         "defect_area_px": defect_area_px,
         "defect_area_pct": round(defect_area_pct, 4),
-        "contours": contours
+        "contours": contours,
+        "morphology_analysis": morphology_analysis,
+        "morphology_configuration": {
+            "opening": {
+                "kernel_shape": MORPHOLOGY_KERNEL_SHAPE_LABEL,
+                "kernel_size": (KERNEL_OPEN_SIZE, KERNEL_OPEN_SIZE),
+                "iterations": OPENING_ITERATIONS,
+            },
+            "closing": {
+                "kernel_shape": MORPHOLOGY_KERNEL_SHAPE_LABEL,
+                "kernel_size": (KERNEL_CLOSE_SIZE, KERNEL_CLOSE_SIZE),
+                "iterations": CLOSING_ITERATIONS,
+            },
+        },
     }
 
     return stages, metrics

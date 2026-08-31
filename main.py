@@ -1,9 +1,3 @@
-"""Entry point and command-line controller for the PCB Inspection System.
-
-Running ``python main.py`` launches the Streamlit interface. A non-interactive
-pipeline is also available with ``python main.py --cli`` for demonstrations and
-automated verification.
-"""
 
 import argparse
 import subprocess
@@ -14,10 +8,11 @@ from typing import Optional, Sequence
 
 import cv2
 
+from modules.calibration import calibrate_to_reference
 from modules.dataset_paths import PROJECT_ROOT, discover_dataset_images, find_reference_image
 from modules.feature_analysis import analyse_features
 from modules.inspection_evaluation import assess_defect_severity
-from modules.preprocessing import preprocess_image
+from modules.preprocessing import load_image, preprocess_image_array
 from modules.reporting import generate_inspection_summary
 from modules.segmentation import create_defect_overlay, segment_image
 
@@ -27,7 +22,6 @@ DEFAULT_OUTPUT_DIR = PROJECT_ROOT / "outputs"
 
 
 def _save_image(image, output_path: Path) -> Path:
-    """Save an OpenCV image and raise a useful error if writing fails."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
     if not cv2.imwrite(str(output_path), image):
         raise OSError(f"Unable to save output image: {output_path}")
@@ -69,12 +63,19 @@ def run_cli_inspection(
     template_path: Optional[str] = None,
     output_dir: Path = DEFAULT_OUTPUT_DIR,
 ) -> int:
-    """Run Modules 1, 2, 3, and 5 without starting the GUI."""
     test_path, reference_path = _resolve_cli_inputs(image_path, template_path)
     started = time.perf_counter()
 
-    processed_test = preprocess_image(str(test_path))
-    processed_reference = preprocess_image(str(reference_path))
+    test_image = load_image(test_path)
+    reference_image = load_image(reference_path)
+    calibration_result = calibrate_to_reference(test_image, reference_image)
+    if not calibration_result.is_verified:
+        metadata = calibration_result.metadata
+        raise ValueError(
+            f"Calibration {metadata['status']}: {metadata['message']}"
+        )
+    processed_test = preprocess_image_array(calibration_result.calibrated_test)
+    processed_reference = preprocess_image_array(reference_image)
     _, _, _, cleaned, contours, otsu_value = segment_image(
         processed_test, processed_reference
     )
@@ -98,6 +99,9 @@ def run_cli_inspection(
     print("PCB Inspection System - CLI Result")
     print(f"Test image: {test_path}")
     print(f"Reference: {reference_path}")
+    print(f"Calibration: {calibration_result.metadata['status']}")
+    print(f"Calibration method: {calibration_result.metadata['method']}")
+    print(f"Warp applied: {calibration_result.metadata['warp_applied']}")
     print(f"Otsu threshold: {otsu_value:.2f}")
     print(f"Status: {evaluation['status_label']}")
     print(f"Total defects: {evaluation['total_defect_count']}")
@@ -114,7 +118,6 @@ def run_cli_inspection(
 
 
 def launch_gui(headless: bool = False, port: Optional[int] = None) -> int:
-    """Launch the Streamlit Module 4 inspection interface."""
     command = [sys.executable, "-m", "streamlit", "run", str(GUI_PATH)]
     if headless:
         command.append("--server.headless=true")

@@ -1,4 +1,3 @@
-"""Small presentation helpers for preprocessing comparisons in the GUI."""
 
 from collections.abc import Mapping
 from numbers import Real
@@ -14,12 +13,6 @@ RoiBounds = Tuple[int, int, int, int]
 def create_filtering_change_map(
     grayscale: np.ndarray, median_filtered: np.ndarray
 ) -> Tuple[np.ndarray, np.ndarray]:
-    """Return the raw and display-normalized median-filtering change maps.
-
-    The raw map is ``abs(grayscale - median_filtered)``. Normalization is
-    applied only to a separate visualization array and never alters either
-    preprocessing stage.
-    """
     for name, image in (
         ("grayscale", grayscale),
         ("median_filtered", median_filtered),
@@ -53,11 +46,6 @@ def create_filtering_change_map(
 def extract_matching_center_rois(
     images: Mapping[str, np.ndarray], fraction: float = 0.32
 ) -> Tuple[Dict[str, np.ndarray], RoiBounds]:
-    """Crop the same proportional central region from equally sized images.
-
-    Returns the copied crops and ``(x_start, y_start, x_end, y_end)`` bounds.
-    The proportional crop remains resolution-independent.
-    """
     if not images:
         raise ValueError("At least one image is required for ROI comparison.")
     if (

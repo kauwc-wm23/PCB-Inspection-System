@@ -1,22 +1,13 @@
-"""Module 5: per-defect severity assessment and spatial analysis.
-
-This module consumes geometric measurements from Module 3. It does not perform
-thresholding, morphology, contour detection, or defect classification.
-"""
 
 from math import isfinite
 from numbers import Real
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 
 
-# Configurable prototype weights. They are not scientifically validated.
 DEFAULT_AREA_WEIGHT = 0.60
 DEFAULT_WIDTH_WEIGHT = 0.20
 DEFAULT_HEIGHT_WEIGHT = 0.20
 
-# A 44-defect cross-category audit produced score quartiles near 0.0023,
-# 0.0031, and 0.0044. These rounded cutoffs are prototype relative thresholds,
-# not manufacturing acceptance limits or dataset-supplied severity labels.
 LOW_MAX_SEVERITY_SCORE = 0.0025
 MEDIUM_MAX_SEVERITY_SCORE = 0.0050
 
@@ -90,15 +81,6 @@ def assess_defect_severity(
     low_score_threshold: float = LOW_MAX_SEVERITY_SCORE,
     medium_score_threshold: float = MEDIUM_MAX_SEVERITY_SCORE,
 ) -> Dict[str, Any]:
-    """Score, rank, and spatially summarize Module 3 defect measurements.
-
-    ``area_ratio``, ``width_ratio``, and ``height_ratio`` are fractions in the
-    range normally expected around 0..1. The severity score is:
-
-    ``area_weight*area_ratio + width_weight*width_ratio + height_weight*height_ratio``
-
-    Thresholds and weights are configurable prototype parameters.
-    """
     if defects is None:
         defects = []
     if not isinstance(defects, Sequence) or isinstance(defects, (str, bytes)):
@@ -284,7 +266,6 @@ def evaluate_inspection(
     low_score_threshold: float = LOW_MAX_SEVERITY_SCORE,
     medium_score_threshold: float = MEDIUM_MAX_SEVERITY_SCORE,
 ) -> Dict[str, Any]:
-    """Backward-compatible alias for the Module 5 assessment entry point."""
     return assess_defect_severity(
         defects=defects,
         image_shape=image_shape,

@@ -1,12 +1,3 @@
-"""Compare real-data segmentation with and without full preprocessing.
-
-Both conditions use the same reference matching, segmentation implementation,
-feature extraction, Pascal VOC boxes, and IoU matching. Only the input
-preparation differs:
-
-* ``grayscale_only``: load, preserve size, convert to grayscale.
-* ``production_preprocessing``: grayscale, 5x5 median filter, CLAHE.
-"""
 
 import argparse
 import csv
@@ -68,7 +59,6 @@ def select_balanced_images(
     categories: Optional[Sequence[str]] = None,
     variants_per_board: int = DEFAULT_VARIANTS_PER_BOARD,
 ) -> List[Path]:
-    """Select the first sorted variants for every category/board combination."""
     available = discover_dataset_images()
     available_categories = sorted({path.parent.name for path in available})
     selected_categories = available_categories if not categories else sorted(set(categories))
@@ -87,12 +77,10 @@ def select_balanced_images(
 
 
 def _grayscale_only(image_path: Path) -> np.ndarray:
-    """Use only the minimal conversion required by segmentation."""
     return convert_grayscale(resize_image(load_image(image_path)))
 
 
 def _annotation_size(annotation_path: Path) -> Optional[Tuple[int, int]]:
-    """Return Pascal VOC ``(width, height)`` metadata when present."""
     size = ET.parse(annotation_path).getroot().find("size")
     if size is None:
         return None
@@ -106,7 +94,6 @@ def _run_condition(
     reference_path: Path,
     condition: str,
 ) -> Dict:
-    """Run one condition while preserving the production segmentation logic."""
     started_total = time.perf_counter()
     started_preprocessing = time.perf_counter()
     if condition == "grayscale_only":
@@ -144,7 +131,6 @@ def _safe_ratio(numerator: int, denominator: int) -> float:
 
 
 def _summarize(rows: Sequence[Dict]) -> List[Dict]:
-    """Aggregate category and overall bounding-box metrics by condition."""
     output: List[Dict] = []
     categories = sorted({row["category"] for row in rows})
     for scope in categories + ["OVERALL"]:
@@ -214,7 +200,6 @@ def _summarize(rows: Sequence[Dict]) -> List[Dict]:
 
 
 def _paired_differences(rows: Sequence[Dict]) -> Tuple[List[Dict], Dict]:
-    """Build paired production-minus-grayscale differences for each image."""
     pairs: Dict[Tuple[str, str, str], Dict[str, Dict]] = defaultdict(dict)
     for row in rows:
         key = (row["category"], row["board_id"], row["image"])
@@ -421,7 +406,6 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
             )
             continue
 
-        # Alternate execution order to balance cache and warm-up effects.
         condition_order = CONDITIONS if image_index % 2 == 0 else tuple(reversed(CONDITIONS))
         for condition in condition_order:
             result = _run_condition(image_path, reference_path, condition)

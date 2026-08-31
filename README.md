@@ -4,7 +4,7 @@ BMDS2133 Mode B prototype using classical image processing only.
 
 ## Processing flow
 
-1. Module 1 — grayscale conversion, 5×5 median filtering, and CLAHE histogram equalisation.
+1. Module 1 — bounded reference-relative calibration, grayscale conversion, 5×5 median filtering, and CLAHE histogram equalisation.
 2. Module 2 — clean-reference difference, low-level JPEG noise suppression, Otsu thresholding, morphological opening/closing, and contour detection.
 3. Module 3 — connected-component area, dimensions, bounding box, and centroid extraction.
 4. Module 5 — per-defect severity scoring, priority ranking, and quadrant-based spatial analysis.
@@ -30,13 +30,30 @@ python main.py --cli
 python main.py --cli --image dataset/images/Short/01_short_01.jpg
 ```
 
+## Inspection modes
+
+The Streamlit GUI keeps the accepted **Single Image** workflow and also provides
+**Bulk Images** ingestion for up to 10 JPG, JPEG, or PNG files. Bulk images are
+processed sequentially. Each filename independently resolves its matching
+`PCB_USED` reference, then runs the same calibration, preprocessing,
+segmentation, feature, severity/spatial, and reporting pipeline as Single Image
+mode. One failed image is reported without stopping later valid images.
+
+Bulk mode retains compact summaries rather than every intermediate image array.
+It provides aggregate metrics, a results table, one selected per-image
+drill-down through the existing five processing tabs, and one aggregate JSON
+download. It does not provide folder ingestion, parallel processing, PDF/CSV
+reporting, physical millimetre calibration, or video processing.
+
 ## Experiments
 
 ```powershell
 python experiments/preprocessing_test.py
+python experiments/calibration_evaluation.py --production-regression
 python experiments/segmentation_test.py --category Missing_hole
 python experiments/module5_test.py
 python experiments/gui_integration_test.py
+python experiments/bulk_integration_test.py
 python experiments/evaluation.py --limit 12 --iou-threshold 0.5
 python experiments/preprocessing_evaluation.py
 python experiments/segmentation_preprocessing_comparison.py
@@ -68,6 +85,21 @@ and timing; it does not report pixel Dice or pixel IoU.
 Both scripts save per-image CSV files, aggregate CSV summaries, concise plots,
 example panels, and reproducibility manifests under `outputs/experiments/`.
 Generated files do not affect application runtime and are ignored by Git.
+
+## Image calibration and rectification
+
+Before enhancement, the application uses ORB feature matching, mutual ratio
+filtering, RANSAC, and a bounded similarity transform to place the test image
+in the matching reference PCB coordinate system. The transform permits only
+small translation, rotation, and uniform scale changes. Already-aligned images
+use an identity fast path, so their original pixels are not resampled. An
+unreliable or excessive transform is rejected before reference-difference
+segmentation.
+
+This is reference-relative geometric registration for spatial consistency; it
+is not physical dimensional calibration. PCB-DATASET does not provide a
+validated physical reference, so measurements remain in px, px², and
+normalised image ratios. No pixel-to-mm conversion is performed.
 
 The GUI's filtering change map is the display-normalized absolute difference
 between grayscale and median-filtered images. It shows where filtering changed

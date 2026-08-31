@@ -1,4 +1,3 @@
-"""Focused regression checks for Module 5 severity and spatial assessment."""
 
 from pathlib import Path
 import sys

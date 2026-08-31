@@ -1,4 +1,3 @@
-"""Project-relative paths and discovery helpers for PCB-DATASET."""
 
 from pathlib import Path
 from typing import Iterable, List, Optional, Union
@@ -19,7 +18,6 @@ def _is_supported_image(path: Path) -> bool:
 
 
 def discover_dataset_images(category: Optional[str] = None) -> List[Path]:
-    """Return defect images recursively, optionally within one category."""
     search_root = IMAGE_ROOT / category if category else IMAGE_ROOT
     if not search_root.is_dir():
         return []
@@ -27,20 +25,17 @@ def discover_dataset_images(category: Optional[str] = None) -> List[Path]:
 
 
 def discover_reference_images() -> List[Path]:
-    """Return all available clean PCB reference images."""
     if not PCB_USED_ROOT.is_dir():
         return []
     return sorted(path for path in PCB_USED_ROOT.iterdir() if _is_supported_image(path))
 
 
 def board_id_from_name(image: Union[str, Path]) -> str:
-    """Extract the leading board identifier used by PCB-DATASET filenames."""
     stem = Path(image).stem
     return stem.split("_", 1)[0]
 
 
 def find_reference_image(image: Union[str, Path]) -> Optional[Path]:
-    """Find the clean PCB_USED image matching a defect image's board ID."""
     board_id = board_id_from_name(image).casefold()
     for reference in discover_reference_images():
         if reference.stem.casefold() == board_id:
@@ -49,7 +44,6 @@ def find_reference_image(image: Union[str, Path]) -> Optional[Path]:
 
 
 def find_annotation(image: Union[str, Path]) -> Optional[Path]:
-    """Find a same-stem Pascal VOC XML annotation for a defect image."""
     image_path = Path(image)
     stem = image_path.stem
 

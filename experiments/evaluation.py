@@ -1,8 +1,3 @@
-"""Quantitative evaluation against PCB-DATASET Pascal VOC annotations.
-
-This script evaluates detected bounding boxes only. Dataset folder labels are
-used for grouping results; they are not used to classify predictions.
-"""
 
 import argparse
 import sys
@@ -27,7 +22,6 @@ BoundingBox = Tuple[int, int, int, int]
 
 
 def load_pascal_voc_boxes(annotation_path: Path) -> List[BoundingBox]:
-    """Read valid ``(xmin, ymin, xmax, ymax)`` boxes from a VOC XML file."""
     root = ET.parse(annotation_path).getroot()
     boxes: List[BoundingBox] = []
     for obj in root.findall("object"):
@@ -41,7 +35,6 @@ def load_pascal_voc_boxes(annotation_path: Path) -> List[BoundingBox]:
 
 
 def feature_boxes(defects: Sequence[Dict]) -> List[BoundingBox]:
-    """Convert Module 3 feature dictionaries into corner-coordinate boxes."""
     boxes: List[BoundingBox] = []
     for defect in defects:
         box = defect.get("bounding_box", {})
@@ -53,7 +46,6 @@ def feature_boxes(defects: Sequence[Dict]) -> List[BoundingBox]:
 
 
 def intersection_over_union(first: BoundingBox, second: BoundingBox) -> float:
-    """Return bounding-box IoU in the range 0..1."""
     intersection_width = max(0, min(first[2], second[2]) - max(first[0], second[0]))
     intersection_height = max(0, min(first[3], second[3]) - max(first[1], second[1]))
     intersection = intersection_width * intersection_height
@@ -68,7 +60,6 @@ def match_boxes(
     predictions: Sequence[BoundingBox],
     iou_threshold: float,
 ) -> Tuple[int, int, int, List[float]]:
-    """Greedily perform one-to-one IoU matching for TP/FP/FN counts."""
     candidates = sorted(
         (
             (intersection_over_union(gt_box, pred_box), gt_index, pred_index)
@@ -100,7 +91,6 @@ def _empty_totals() -> Dict[str, object]:
 
 
 def evaluate_images(image_paths: Iterable[Path], iou_threshold: float) -> Dict[str, Dict[str, object]]:
-    """Run the classical pipeline and aggregate results by defect category."""
     totals: Dict[str, Dict[str, object]] = defaultdict(_empty_totals)
 
     for image_path in image_paths:
@@ -152,7 +142,6 @@ def _metrics(stats: Dict[str, object]) -> Dict[str, float]:
 
 
 def print_results(results: Dict[str, Dict[str, object]], iou_threshold: float) -> None:
-    """Print category and overall metrics without inventing unavailable labels."""
     print(f"PCB-DATASET bounding-box evaluation (IoU threshold={iou_threshold:.2f})")
     print("Category          Images   TP   FP   FN  Precision  Recall   F1  Mean IoU  Detection  Avg sec")
     overall = _empty_totals()
