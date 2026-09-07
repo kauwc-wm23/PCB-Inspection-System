@@ -12,7 +12,7 @@ MORPHOLOGY_KERNEL_SHAPE_LABEL = "Ellipse"
 OPENING_ITERATIONS = 1
 CLOSING_ITERATIONS = 1
 
-MIN_DEFECT_AREA = 15
+MIN_DEFECT_AREA = 30
 MAX_DEFECT_AREA = 50000
 
 DIFFERENCE_NOISE_FLOOR = 6
@@ -305,8 +305,11 @@ def detect_defect_contours(
 
     if min_area < 0:
         raise ValueError("min_area cannot be negative.")
+
     if max_area is not None and max_area < min_area:
-        raise ValueError("max_area must be greater than or equal to min_area.")
+        raise ValueError(
+            "max_area must be greater than or equal to min_area."
+        )
 
     contours, _ = cv2.findContours(
         cleaned_mask,
@@ -316,6 +319,8 @@ def detect_defect_contours(
 
     valid_contours = []
 
+    image_height, image_width = cleaned_mask.shape[:2]
+
     for contour in contours:
 
         area = cv2.contourArea(contour)
@@ -324,6 +329,17 @@ def detect_defect_contours(
             continue
 
         if max_area is not None and area > max_area:
+            continue
+
+        x, y, w, h = cv2.boundingRect(contour)
+
+
+        if (
+            x <= 1
+            or y <= 1
+            or x + w >= image_width - 1
+            or y + h >= image_height - 1
+        ):
             continue
 
         valid_contours.append(contour)
@@ -507,5 +523,5 @@ def get_segmentation_stages(
             },
         },
     }
-
+    
     return stages, metrics
